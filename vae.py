@@ -1,16 +1,3 @@
-"""
-Variational Auto‑Encoder (VAE) for MNIST in PyTorch
---------------------------------------------------
-Run this file directly to train a convolutional VAE on MNIST.  The script
-handles downloading the dataset, training, evaluation and basic sample
-generation.
-
-Usage (defaults in brackets):
-    python vae_mnist.py --epochs 20 --batch-size 128 --latent-dim 20 --lr 1e-3
-
-Add --no-cuda to force CPU even if a GPU is available.
-"""
-
 from __future__ import annotations
 import argparse
 from pathlib import Path
@@ -33,41 +20,65 @@ class VAE(nn.Module):
         # -------- Encoder --------
         # Input: Batch x 3 x 64 x 64
         self.enc_conv1 = nn.Conv2d(3, 32, kernel_size=4, stride=2, padding=1)  # Output: Batch x 32 x 32 x 32
+        self.batch_norm1 = nn.BatchNorm2d(32)  # Batch normalization after first conv layer
         self.enc_conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1) # Output: Batch x 64 x 16 x 16
+        self.batch_norm2 = nn.BatchNorm2d(64)  # Batch normalization after second conv layer
         self.enc_conv3 = nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1) # Output: Batch x 128 x 8 x 8
-        
+        self.batch_norm3 = nn.BatchNorm2d(128)  # Batch normalization after third conv layer
+
         self.flattened_size = 128 * 8 * 8  # 8192
         self.fc_hidden_dim = 512 # Intermediate dimension for FC layers
 
-        self.enc_fc = nn.Linear(self.flattened_size, self.fc_hidden_dim)
+        self.enc_fc_1 = nn.Linear(self.flattened_size, self.fc_hidden_dim)
+        self.batch_norm_fc_1 = nn.BatchNorm1d(self.fc_hidden_dim)  # Batch normalization for FC layer
+        self.enc_fc = nn.Linear(self.fc_hidden_dim, self.fc_hidden_dim)
+        self.batch_norm_fc = nn.BatchNorm1d(self.fc_hidden_dim)
         self.fc_mu = nn.Linear(self.fc_hidden_dim, latent_dim)
         self.fc_logvar = nn.Linear(self.fc_hidden_dim, latent_dim)
 
         # -------- Decoder --------
         self.dec_fc1 = nn.Linear(latent_dim, self.fc_hidden_dim)
+        self.batch_norm_dec_fc1 = nn.BatchNorm1d(self.fc_hidden_dim)  # Batch normalization for FC layer
         self.dec_fc2 = nn.Linear(self.fc_hidden_dim, self.flattened_size)
+        self.batch_norm_dec_fc2 = nn.BatchNorm1d(self.flattened_size)  # Batch normalization for second FC layer
         
         # Input: Batch x 128 x 8 x 8 (after reshape)
         self.dec_deconv1 = nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1)  # Output: Batch x 64 x 16 x 16
+        self.batch_norm_dec_deconv1 = nn.BatchNorm2d(64)
         self.dec_deconv2 = nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1)  # Output: Batch x 32 x 32 x 32
-        self.dec_deconv3 = nn.ConvTranspose2d(32, 3, kernel_size=4, stride=2, padding=1)   # Output: Batch x 3 x 64 x 64
+        self.batch_norm_dec_deconv2 = nn.BatchNorm2d(32)
+        self.dec_deconv3 = nn.ConvTranspose2d(32, 32, kernel_size=4, stride=2, padding=1)   # Output: Batch x 3 x 64 x 64
+        self.batch_norm_dec_deconv3 = nn.BatchNorm2d(32)  # Batch normalization for last deconv layer
+        self.dec_output = nn.Conv2d(32, 3, kernel_size=3, stride=1, padding=1)  # Final output layer
 
     # ---- Helper sub‑functions ----
     def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         h = F.relu(self.enc_conv1(x))
+        h = self.batch_norm1(h)  # Apply batch normalization
         h = F.relu(self.enc_conv2(h))
+        h = self.batch_norm2(h)  # Apply batch normalization
         h = F.relu(self.enc_conv3(h))
+        h = self.batch_norm3(h)  # Apply batch normalization
         h = h.view(x.size(0), -1)  # Flatten
+        h = F.relu(self.enc_fc_1(h))
+        h = self.batch_norm_fc_1(h)  # Apply batch normalization
         h = F.relu(self.enc_fc(h))
+        h = self.batch_norm_fc(h)  # Apply batch normalization
         return self.fc_mu(h), self.fc_logvar(h)
     
     def decode(self, z: torch.Tensor) -> torch.Tensor:
         h = F.relu(self.dec_fc1(z))
+        h = self.batch_norm_dec_fc1(h)  # Apply batch normalization
         h = F.relu(self.dec_fc2(h))
+        h = self.batch_norm_dec_fc2(h)  # Apply batch normalization
         h = h.view(-1, 128, 8, 8)  # Reshape to match deconv input
         h = F.relu(self.dec_deconv1(h))
+        h = self.batch_norm_dec_deconv1(h)  # Apply batch normalization
         h = F.relu(self.dec_deconv2(h))
-        return torch.sigmoid(self.dec_deconv3(h)) # Sigmoid for [0,1] output
+        h = self.batch_norm_dec_deconv2(h)
+        h = F.relu(self.dec_deconv3(h))
+        h = self.batch_norm_dec_deconv3(h)
+        return F.sigmoid(self.dec_output(h))  # Sigmoid activation for output layer
 
     @staticmethod
     def reparameterize(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
@@ -86,8 +97,6 @@ class VAE(nn.Module):
 
 
 # ------------- Loss -------------
-
-import torch
 
 def create_purple_weight_map_rgb(x: torch.Tensor,
                                  purple_weight: float = 10.0,
@@ -143,15 +152,15 @@ def create_purple_weight_map_rgb(x: torch.Tensor,
     # The shape becomes (B, 1, H, W), which can be multiplied with (B, 3, H, W).
     return weights.unsqueeze(1)
 
-def vae_loss(recon_x: torch.Tensor, x: torch.Tensor, mu: torch.Tensor, logvar: torch.Tensor, purple_weight: float = 5.0, dominance_margin: float = 0.1) -> torch.Tensor:
-    """Binary cross‑entropy + KL divergence, averaged per mini‑batch."""
+def vae_loss(recon_x: torch.Tensor, x: torch.Tensor, mu: torch.Tensor, logvar: torch.Tensor, purple_weight: float = 2.0, dominance_margin: float = 0.1) -> torch.Tensor:
+    """Binary cross entropy + KL divergence, averaged per mini batch."""
     weight_in_map = create_purple_weight_map_rgb(x, purple_weight, dominance_margin)
     weight_out_map = create_purple_weight_map_rgb(recon_x, purple_weight, dominance_margin)
-    bce = F.binary_cross_entropy(recon_x, x, reduction="none")
+    bce = F.mse_loss(recon_x, x, reduction="none")
     # Apply the weight map to the BCE loss
-    bce = (bce * (weight_in_map + weight_out_map)).sum()
-    kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    return (bce + 0.8*kld) / x.size(0)
+    bce = (bce * (weight_in_map + weight_out_map)/2).sum()
+    # kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    return (bce) / x.size(0)
 
 
 # ---------- Train / Test loops ----------
@@ -159,7 +168,7 @@ def vae_loss(recon_x: torch.Tensor, x: torch.Tensor, mu: torch.Tensor, logvar: t
 def train_epoch(model: VAE, loader: DataLoader, optimizer: optim.Optimizer, device: torch.device) -> float:
     model.train()
     epoch_loss = 0.0
-    for x, _, _ in loader:
+    for x in loader:
         x = x.to(device)
         optimizer.zero_grad()
         recon, mu, logvar = model(x)
@@ -174,7 +183,7 @@ def test_epoch(model: VAE, loader: DataLoader, device: torch.device) -> float:
     model.eval()
     test_loss = 0.0
     with torch.no_grad():
-        for x, _, _ in loader:
+        for x in loader:
             x = x.to(device)
             recon, mu, logvar = model(x)
             loss = vae_loss(recon, x, mu, logvar)

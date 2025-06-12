@@ -3,34 +3,21 @@ import torch
 from vae import VAE, vae_loss, train_epoch, test_epoch
 import random
 import matplotlib.pyplot as plt
+from utils_proj import get_best_device, show_datasets
 
-dataset = Dataset(
+dataset:Dataset = Dataset(
     path="dataset",
     condition="no_obj"
 )
+device = get_best_device()
 
-def show_datasets():
-    train_set = dataset.get_training_set()
-    val_set = dataset.get_validation_set()
-    print(f"Training set size: {len(train_set[0])}")
-    print(f"Validation set size: {len(val_set[0])}")
-    sample = dataset[0]
-    print(f"Sample data shape: {sample[0].shape}, {sample[1].shape}, {sample[2].shape}")
 
 def train_model():
-    # train VAE model
-    if torch.cuda.is_available():
-        device = 'cuda'
-    elif torch.backends.mps.is_available():
-        device = 'mps'
-    else:
-        device = 'cpu'
-    device = torch.device(device=device)
-    model = VAE(latent_dim=100).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=2e-3)
-    train_loader = torch.utils.data.DataLoader(dataset, batch_size=32, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(dataset, batch_size=32, shuffle=False)
-    num_epochs = 10
+    model = VAE(latent_dim=200).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    train_loader = torch.utils.data.DataLoader(dataset.get_training_set()[0], batch_size=16, shuffle=True)
+    test_loader = torch.utils.data.DataLoader(dataset.get_validation_set()[0], batch_size=64, shuffle=False)
+    num_epochs = 40
     train_losses = []
     test_losses = []
     for epoch in range(num_epochs):
@@ -39,6 +26,13 @@ def train_model():
         print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
         train_losses.append(train_loss)
         test_losses.append(test_loss)
+        # early stopping condition
+        if epoch > 5 and test_loss > max(test_losses[-6:]):
+            print("Early stopping triggered.")
+            break
+        # save the best model
+        if epoch == 0 or test_loss < min(test_losses[:-1]):
+            torch.save(model.state_dict(), "vae_model.pth")
     # Plot training and test losses
     plt.figure(figsize=(10, 5))
     plt.title("Training and Test Losses")
@@ -50,19 +44,11 @@ def train_model():
     plt.grid()
     plt.tight_layout()
     # Save the model
-    torch.save(model.state_dict(), "vae_model.pth")
+    #torch.save(model.state_dict(), "vae_model.pth")
 
-def test_model():
-    # Load the model
-    if torch.cuda.is_available():
-        device = 'cuda'
-    elif torch.backends.mps.is_available():
-        device = 'mps'
-    else:
-        device = 'cpu'
-    device = torch.device(device=device)
-    model = VAE(latent_dim=100).to(device)
-    model.load_state_dict(torch.load("vae_model.pth"))
+def test_model(name: str = "vae_model.pth"):
+    model = VAE(latent_dim=200).to(device)
+    model.load_state_dict(torch.load(name))
     model.eval()
     
     # Test the model with a couple of samples
@@ -107,5 +93,6 @@ def test_model():
 
 
 if __name__ == "__main__":
-    #train_model()
-    test_model()
+    train_model()
+    #show_datasets()
+    test_model("vae_final_model.pth")
