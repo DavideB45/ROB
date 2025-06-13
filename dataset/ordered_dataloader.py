@@ -27,9 +27,11 @@ class Dataset(torch.utils.data.Dataset):
         # they have len 7322
         print(f"vision shape: {vision.shape}, act shape: {act.shape}")
         # remove 2 frames (to be divisible by 10)
+        print(f"pos shape: {pos.shape}, vision shape: {vision.shape}, act shape: {act.shape}")
         pos = pos[1:-1]
         vision = vision[1:-1]
         act = act[:-2] # different to account for previous action
+        print(f"pos shape: {pos.shape}, vision shape: {vision.shape}, act shape: {act.shape}")
         self.setup_dataset(vision, act, vision_vae)
         self.split_data()
         
@@ -91,7 +93,8 @@ class Dataset(torch.utils.data.Dataset):
         return (pos,force,vision,act)
     
     def setup_dataset(self, vision, act, vision_vae:VAE) -> None:
-        """Setup the dataset by generating training dataset.
+        """Setup the dataset by generating training dataset. And rescaling the data.
+        This method encodes the vision data using a VAE, divides the dataset into sections of 10 frames,
         Args:
             vision (np.ndarray): The vision data.
             act (np.ndarray): The action data.
@@ -103,10 +106,13 @@ class Dataset(torch.utils.data.Dataset):
         world_embedding = vision_vae.encode(vision)
         # divide the dataset into section of duration 10 frames
         self.data = []
-        print(f"world_embedding shape: {world_embedding[0].shape}, act shape: {act.shape}")
+        self.sc_MU = StandardScaler()
+        world_embedding_mu = self.sc_MU.fit_transform(world_embedding[0].detach().cpu().numpy())
+        self.sc_LOGVAR = StandardScaler()
+        world_embedding_lv = self.sc_LOGVAR.fit_transform(world_embedding[1].detach().cpu().numpy())
         for i in range(0, len(act) - 10, 10):
-            mu_frames = world_embedding[0][i:i + 10]  # take 10 frames of mean
-            logvar_frames = world_embedding[1][i:i + 10]
+            mu_frames = world_embedding_mu[i:i + 10]  # take 10 frames of mean
+            logvar_frames = world_embedding_lv[i:i + 10]
             act_frames = act[i:i + 10]  # take 10 frames of actions
             if len(mu_frames) == 10 and len(act_frames) == 10:
                 self.data.append((mu_frames, logvar_frames, act_frames))
@@ -135,10 +141,14 @@ class Dataset(torch.utils.data.Dataset):
             sc = self.sc_FORCE
         elif type == "ACT":
             sc = self.sc_ACT
+        elif type == "MU":
+            sc = self.sc_MU
+        elif type == "LOGVAR":
+            sc = self.sc_LOGVAR
         return sc.inverse_transform(data.detach().numpy())
     
     def get_training_set(self):
-        return self.ts
+        return self.tr
     
     def get_validation_set(self):
         return self.vs
@@ -154,7 +164,7 @@ if __name__ == "__main__":
     ds_dir = "dataset"
     ds_cond = "no_obj"
     vision_vae = VAE(latent_dim=200).to(device)  # Assuming you have a pre-trained VAE model
-    vision_vae.load_state_dict(torch.load("vae_final_model.pth", map_location=device))
+    vision_vae.load_state_dict(torch.load("models/vae_final_model.pth", map_location=device))
     vision_vae.eval()  # Set the VAE to evaluation mode
     dataset = Dataset(ds_dir, ds_cond, vision_vae)
     
@@ -163,3 +173,12 @@ if __name__ == "__main__":
     # Example of accessing a sample
     sample_mu, sample_logvar, sample_act = dataset[0]
     print(f"Sample mu shape: {sample_mu.shape}, logvar shape: {sample_logvar.shape}, act shape: {sample_act.shape}")
+    print("FAKE TRAINING")
+    train_loader = torch.utils.data.DataLoader(dataset.get_training_set(), batch_size=16, shuffle=True)
+    for i, (mu_frames, logvar_frames, act_frames) in enumerate(train_loader):
+        print(f"Batch {i+1}: mu_frames shape: {mu_frames.shape}, logvar_frames shape: {logvar_frames.shape}, act_frames shape: {act_frames.shape}")
+        if i == 5:  # Just to limit output for demonstration
+            print(f"logvars:")
+            for j in range(len(logvar_frames[0])):
+                print(f"  Sample 0 frame {j+1}: {logvar_frames[0][j][5:10].cpu().detach().numpy()}")
+            break
