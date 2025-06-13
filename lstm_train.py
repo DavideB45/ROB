@@ -28,9 +28,18 @@ def main():
 		"train": [],
 		"validation": []
 	}
+	print("Traoning the LSTM model with teacher forcing...")
 	for epoch in range(100):  # Example: 10 epochs
 		epoch_tr_loss = lstm_model.train_epoch(tr_loader, optimizer, device, teacher_forcing=True)
 		epoch_vs_loss = lstm_model.test_epoch(vs_loader, device, teacher_forcing=True)
+		print(f"Epoch {epoch+1}: Train Loss: {epoch_tr_loss:.4f}, Validation Loss: {epoch_vs_loss:.4f}")
+		losses["train"].append(epoch_tr_loss)
+		losses["validation"].append(epoch_vs_loss)
+
+	print("Training LSTM model without teacher forcing...")
+	for epoch in range(100):  # Example: 10 epochs
+		epoch_tr_loss = lstm_model.train_epoch(tr_loader, optimizer, device, teacher_forcing=False)
+		epoch_vs_loss = lstm_model.test_epoch(vs_loader, device, teacher_forcing=False)
 		print(f"Epoch {epoch+1}: Train Loss: {epoch_tr_loss:.4f}, Validation Loss: {epoch_vs_loss:.4f}")
 		losses["train"].append(epoch_tr_loss)
 		losses["validation"].append(epoch_vs_loss)

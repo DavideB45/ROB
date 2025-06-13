@@ -25,41 +25,52 @@ class MuLogvarLSTM(nn.Module):
         self.fc_mu = Linear(hidden_dim, embedding_dim)
         self.fc_logvar = Linear(hidden_dim, embedding_dim)
 
-    def forward(self, x):
-        """
-        Forward pass of the MuLogvarLSTM model.
-        Args:
-            x (torch.Tensor): Input tensor of shape (batch_size, seq_length, embedding_dim).
-        Returns:
-            tuple: A tuple containing the mean and log variance tensors.
-        """
-        lstm_out, _ = self.lstm(x)
-        # Take the output from the last time step
-        last_hidden = lstm_out[:, -1, :]
-        # Apply batch normalization
-        mu = self.fc_mu(last_hidden)
-        logvar = self.fc_logvar(last_hidden)
-        return mu, logvar
     
-    def predict(self, x, steps):
+    def predict(self, mu:torch.Tensor, logvar:torch.Tensor, act:torch.Tensor):
         """
         Predict future values using the LSTM model.
         Args:
-            x (torch.Tensor): Input tensor of shape (batch_size, seq_length, embedding_dim).
-            steps (int): Number of future steps to predict.
+            mu (torch.Tensor): Mean tensor of shape (batch_size, seq_len_obs, embedding_dim).
+            logvar (torch.Tensor): Log variance tensor of shape (batch_size, seq_len_obs, embedding_dim).
+            act (torch.Tensor): Action tensor of shape (batch_size, seq_len_pred, act_dim).
         Returns:
-            torch.Tensor: Predicted values of shape (batch_size, steps, embedding_dim).
+            torch.Tensor: Predicted mean tensor of shape (batch_size, seq_len_pred, embedding_dim).
         """
-        lstm_out, _ = self.lstm(x)
-        predictions = []
-        for _ in range(steps):
-            last_hidden = lstm_out[:, -1, :]
-            mu = self.fc_mu(last_hidden)
-            logvar = self.fc_logvar(last_hidden)
-            predictions.append(mu.unsqueeze(1))
-        predictions = torch.cat(predictions, dim=1)
-        return predictions
-    
+        batch_size, seq_len_pred, act_dim = act.shape
+        _, seq_len_obs, embed_dim = mu.shape
+
+        h_t, c_t = None, None  # For LSTM hidden state
+        outputs_mu = []
+        outputs_logvar = []
+
+        # Start from t=0
+        for t in range(seq_len_pred - 1):
+            if t < seq_len_obs - 1:
+                # Use ground truth
+                mu_input = mu[:, t, :]
+                logvar_input = logvar[:, t, :]
+            else:
+                # Use model prediction
+                mu_input = outputs_mu[-1]
+                logvar_input = outputs_logvar[-1]
+
+            act_t = act[:, t, :]
+            act_t1 = act[:, t + 1, :]
+
+            lstm_input = torch.cat([mu_input, logvar_input, act_t, act_t1], dim=-1).unsqueeze(1)
+            lstm_out, (h_t, c_t) = self.lstm(lstm_input, (h_t, c_t)) if h_t is not None else self.lstm(lstm_input)
+
+            normed = self.batch_norm(lstm_out.transpose(1, 2)).transpose(1, 2)
+            mu_pred = self.fc_mu(normed)
+            logvar_pred = self.fc_logvar(normed)
+
+            outputs_mu.append(mu_pred.squeeze(1))
+            outputs_logvar.append(logvar_pred.squeeze(1))
+
+        return outputs_mu, outputs_logvar
+
+            
+
     def forward_training_teacher_forcing(self, mu, logvar, act):
         """
         Forward pass for training.
@@ -91,6 +102,31 @@ class MuLogvarLSTM(nn.Module):
         loss = mse_mu + mse_logvar
         return loss
     
+    def forward_training_predicting(self, mu, logvar, act):
+        """
+        Forward pass for training without teacher forcing.
+        Args:
+            mu (torch.Tensor): Mean tensor of shape (batch_size, seq_len_obs, embedding_dim).
+            logvar (torch.Tensor): Log variance tensor of shape (batch_size, seq_len_obs, embedding_dim).
+            act (torch.Tensor): Action tensor of shape (batch_size, seq_len_pred, act_dim).
+        Returns:
+            float: The loss value.
+        """
+        mu = mu[:, 0:2, :] # Use the first frame of mu as the initial input
+        logvar = logvar[:, 0:2, :] # Use the first frame of logvar as the initial input  
+        mu = mu.float().contiguous()  # Ensure the tensor is contiguous in memory
+        logvar = logvar.float().contiguous()  # Ensure the tensor is contiguous in memory
+        act = act.float().contiguous()  # Ensure the tensor is contiguous in memory
+        mu_pred, logvar_pred = self.predict(mu, logvar, act)
+        mu_true = mu[:, -1, :]
+        logvar_true = logvar[:, -1, :]
+        mu_pred = mu_pred[-1]  # Get the last prediction
+        logvar_pred = logvar_pred[-1]
+        mse_mu = mse_loss(mu_pred, mu_true)
+        mse_logvar = mse_loss(logvar_pred, logvar_true)
+        loss = mse_mu + mse_logvar
+        return loss
+    
     def forward_training(self, mu, logvar, act, teacher_forcing:bool=True):
         """
         Forward pass for training.
@@ -103,7 +139,7 @@ class MuLogvarLSTM(nn.Module):
         if teacher_forcing:
             return self.forward_training_teacher_forcing(mu, logvar, act)
         else:
-            raise NotImplementedError("Teacher forcing is required for training.") 
+            return self.forward_training_predicting(mu, logvar, act) 
 
 
     def train_epoch(self, tr_loader, optimizer, device, teacher_forcing:bool=True):

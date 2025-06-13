@@ -17,11 +17,12 @@ from utils_proj import get_best_device
 device = get_best_device()
 
 class Dataset(torch.utils.data.Dataset):
-    def __init__(self, ds_dir:str, ds_cond:str, vision_vae:VAE):
+    def __init__(self, ds_dir:str, ds_cond:str, vision_vae:VAE, seq_len:int=10):
         # self.data will be a list of tuples (mu_frames, logvar_frames, act_frames)
         # where each tuple contains 10 frames of vision data and corresponding actions
         # vision start at time t, act at time t-1 to have idea of dynamics
         self.data = None
+        self.seq_len = seq_len  # Length of the sequence to consider for each sample
         # Get simulation data
         pos,force,vision,act = self.get_data(ds_dir, ds_cond)
         # they have len 7322
@@ -110,11 +111,11 @@ class Dataset(torch.utils.data.Dataset):
         world_embedding_mu = self.sc_MU.fit_transform(world_embedding[0].detach().cpu().numpy())
         self.sc_LOGVAR = StandardScaler()
         world_embedding_lv = self.sc_LOGVAR.fit_transform(world_embedding[1].detach().cpu().numpy())
-        for i in range(0, len(act) - 10, 10):
-            mu_frames = world_embedding_mu[i:i + 10]  # take 10 frames of mean
-            logvar_frames = world_embedding_lv[i:i + 10]
-            act_frames = act[i:i + 10]  # take 10 frames of actions
-            if len(mu_frames) == 10 and len(act_frames) == 10:
+        for i in range(0, len(act) - self.seq_len, self.seq_len):
+            mu_frames = world_embedding_mu[i:i + self.seq_len]  # take 10 frames of mean
+            logvar_frames = world_embedding_lv[i:i + self.seq_len]
+            act_frames = act[i:i + self.seq_len]  # take 10 frames of actions
+            if len(mu_frames) == self.seq_len and len(act_frames) == self.seq_len:
                 self.data.append((mu_frames, logvar_frames, act_frames))
             else:
                 print(f"Skipping incomplete frame set at index {i}: {len(mu_frames)} frames, {len(act_frames)} actions")       
