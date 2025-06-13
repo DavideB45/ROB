@@ -93,6 +93,6 @@ def test_model(name: str = "vae_model.pth"):
 
 
 if __name__ == "__main__":
-    train_model()
+    #train_model()
     #show_datasets()
-    test_model("vae_final_model.pth")
+    test_model("vae_model.pth")

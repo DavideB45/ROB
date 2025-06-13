@@ -123,7 +123,7 @@ class Dataset(torch.utils.data.Dataset):
     def split_data(self):
         """Split the dataset into training and validation sets."""
         # Convert data to tensors
-        self.tr, self.vs = train_test_split(self.data, test_size=0.3, random_state=42)
+        self.tr, self.vs = train_test_split(self.data, test_size=0.01, random_state=42)
  
     def rescale(self, data:torch.Tensor, type:str) -> np.ndarray:
         """Rescale the data based on its type.

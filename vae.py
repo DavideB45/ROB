@@ -156,8 +156,8 @@ def vae_loss(recon_x: torch.Tensor, x: torch.Tensor, mu: torch.Tensor, logvar: t
     bce = F.mse_loss(recon_x, x, reduction="none")
     # Apply the weight map to the BCE loss
     bce = (bce * (weight_in_map + weight_out_map)/2).sum()
-    # kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    return (bce) / x.size(0)
+    kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    return (bce + 0.1*kld) / x.size(0)
 
 
 # ---------- Train / Test loops ----------

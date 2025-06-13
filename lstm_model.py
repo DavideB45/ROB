@@ -21,9 +21,32 @@ class MuLogvarLSTM(nn.Module):
                          num_layers=num_layers,
                          dropout=dropout, 
                          batch_first=True)
-        self.batch_norm = BatchNorm1d(hidden_dim)
+        self.batch_norm_1 = BatchNorm1d(hidden_dim)
+        self.fc_1 = Linear(hidden_dim, hidden_dim)  # lstm_out, (h_t, c_t)
+        self.batch_norm_2 = BatchNorm1d(hidden_dim)
+        self.fc_2 = Linear(hidden_dim, hidden_dim)  # lstm_out, (h_t, c_t)
+        self.batch_norm_3 = BatchNorm1d(hidden_dim)
         self.fc_mu = Linear(hidden_dim, embedding_dim)
         self.fc_logvar = Linear(hidden_dim, embedding_dim)
+
+    def forward(self, x, h_t=None, h_c=None):
+        """
+        Forward pass of the LSTM model.
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_length, embedding_dim*2 + act_dim).
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, seq_length, embedding_dim).
+        """
+        out, (h_t, h_t) = self.lstm(x) if h_t is None else self.lstm(x, (h_t, h_t))
+        out = self.batch_norm_1(out.transpose(1, 2)).transpose(1, 2)  # Apply batch normalization
+        out = relu(self.fc_1(out))
+        out = self.batch_norm_2(out.transpose(1, 2)).transpose(1, 2)
+        out = relu(self.fc_2(out))
+        out = self.batch_norm_3(out.transpose(1, 2)).transpose(1, 2)
+        mu = self.fc_mu(out)
+        logvar = self.fc_logvar(out)
+        return mu, logvar, (h_t, h_t)
+        
 
     
     def predict(self, mu:torch.Tensor, logvar:torch.Tensor, act:torch.Tensor):
@@ -36,38 +59,35 @@ class MuLogvarLSTM(nn.Module):
         Returns:
             torch.Tensor: Predicted mean tensor of shape (batch_size, seq_len_pred, embedding_dim).
         """
-        batch_size, seq_len_pred, act_dim = act.shape
-        _, seq_len_obs, embed_dim = mu.shape
+        self.eval()  # Set the model to evaluation mode
+        with torch.no_grad():
+            batch_size, seq_len_pred, act_dim = act.shape
+            _, seq_len_obs, embed_dim = mu.shape
 
-        h_t, c_t = None, None  # For LSTM hidden state
-        outputs_mu = []
-        outputs_logvar = []
+            h_t, c_t = None, None  # For LSTM hidden state
+            outputs_mu = []
+            outputs_logvar = []
 
-        # Start from t=0
-        for t in range(seq_len_pred - 1):
-            if t < seq_len_obs - 1:
-                # Use ground truth
-                mu_input = mu[:, t, :]
-                logvar_input = logvar[:, t, :]
-            else:
-                # Use model prediction
-                mu_input = outputs_mu[-1]
-                logvar_input = outputs_logvar[-1]
+            # Start from t=0
+            for t in range(seq_len_pred - 1):
+                if t < seq_len_obs - 1:
+                    # Use ground truth
+                    mu_input = mu[:, t, :]
+                    logvar_input = logvar[:, t, :]
+                else:
+                    # Use model prediction
+                    mu_input = outputs_mu[-1] #+ mu_input
+                    logvar_input = outputs_logvar[-1] #+ logvar_input
 
-            act_t = act[:, t, :]
-            act_t1 = act[:, t + 1, :]
+                act_t = act[:, t, :]
+                act_t1 = act[:, t + 1, :]
 
-            lstm_input = torch.cat([mu_input, logvar_input, act_t, act_t1], dim=-1).unsqueeze(1)
-            lstm_out, (h_t, c_t) = self.lstm(lstm_input, (h_t, c_t)) if h_t is not None else self.lstm(lstm_input)
+                lstm_input = torch.cat([mu_input, logvar_input, act_t, act_t1], dim=-1).unsqueeze(1)
+                mu_pred, logvar_pred, (h_t, c_t) = self.forward(lstm_input, h_t, c_t)
+                outputs_mu.append(mu_pred.squeeze(1))
+                outputs_logvar.append(logvar_pred.squeeze(1))
 
-            normed = self.batch_norm(lstm_out.transpose(1, 2)).transpose(1, 2)
-            mu_pred = self.fc_mu(normed)
-            logvar_pred = self.fc_logvar(normed)
-
-            outputs_mu.append(mu_pred.squeeze(1))
-            outputs_logvar.append(logvar_pred.squeeze(1))
-
-        return outputs_mu, outputs_logvar
+            return outputs_mu, outputs_logvar
 
             
 
@@ -89,16 +109,10 @@ class MuLogvarLSTM(nn.Module):
             ), 
             dim=-1
         )  # (batch_size, seq_length-1, embedding_dim*2 + act_dim)
-        # convert to float32 if necessary
         x = x.float().contiguous()  # Ensure the tensor is contiguous in memory
-        lstm_out, _ = self.lstm(x)
-        lstm_out = self.batch_norm(lstm_out.transpose(1, 2)).transpose(1, 2)  # Apply batch normalization
-        mu_pred = self.fc_mu(lstm_out)
-        mu_true = mu[:, 1:, :]
-        logvar_pred = self.fc_logvar(lstm_out)
-        logvar_true = logvar[:, 1:, :]
-        mse_mu = mse_loss(mu_pred, mu_true)
-        mse_logvar = mse_loss(logvar_pred, logvar_true)
+        mu_pred, logvar_pred, _ = self.forward(x)  # Forward pass through the LSTM
+        mse_mu = mse_loss(mu_pred, mu[:, 1:, :])
+        mse_logvar = mse_loss(logvar_pred, logvar[:, 1:, :])
         loss = mse_mu + mse_logvar
         return loss
     
@@ -112,18 +126,30 @@ class MuLogvarLSTM(nn.Module):
         Returns:
             float: The loss value.
         """
-        mu = mu[:, 0:2, :] # Use the first frame of mu as the initial input
-        logvar = logvar[:, 0:2, :] # Use the first frame of logvar as the initial input  
         mu = mu.float().contiguous()  # Ensure the tensor is contiguous in memory
         logvar = logvar.float().contiguous()  # Ensure the tensor is contiguous in memory
         act = act.float().contiguous()  # Ensure the tensor is contiguous in memory
-        mu_pred, logvar_pred = self.predict(mu, logvar, act)
-        mu_true = mu[:, -1, :]
-        logvar_true = logvar[:, -1, :]
-        mu_pred = mu_pred[-1]  # Get the last prediction
-        logvar_pred = logvar_pred[-1]
-        mse_mu = mse_loss(mu_pred, mu_true)
-        mse_logvar = mse_loss(logvar_pred, logvar_true)
+        mu_true = mu[:, 1:, :] #- mu[:, :-1, :] # compute target mu
+        logvar_true = logvar[:, 1:, :] #- logvar[:, :-1, :] # compute target logvar
+
+        mu_1 = mu[:, 0, :]  # Get the first mu
+        logvar_1 = logvar[:, 0, :]  # Get the first logvar
+        mu_pred, logvar_pred = [], []
+        h_t, c_t = None, None  # For LSTM hidden state
+        for t in range(act.shape[1] - 1):
+            act_t = act[:, t, :]
+            act_t1 = act[:, t + 1, :]
+            #print(f"t: {t}, act_t: {act_t.shape}, act_t1: {act_t1.shape}, mu_1: {mu_1.shape}, logvar_1: {logvar_1.shape}")
+            lstm_input = torch.cat([mu_1, logvar_1, act_t, act_t1], dim=-1).unsqueeze(1)  # (batch_size, 1, embedding_dim*2 + act_dim)
+            mu_1, logvar_1, (h_t, c_t) = self.forward(lstm_input, h_t, c_t)  # Forward pass through the LSTM
+            mu_1 = mu_1.squeeze(1)  # Remove the sequence dimension
+            logvar_1 = logvar_1.squeeze(1)  # Remove the sequence dimension
+            mu_pred.append(mu_1)  # Append the predicted mu
+            logvar_pred.append(logvar_1)  # Append the predicted logvar
+        mu_pred = torch.stack(mu_pred, dim=1)  # (batch_size, seq_len_pred-1, embedding_dim)
+        logvar_pred = torch.stack(logvar_pred, dim=1)  # (batch_size, seq_len_pred-1, embedding_dim)
+        mse_mu = mse_loss(mu_pred, mu_true)  # Compare with the true mu
+        mse_logvar = mse_loss(logvar_pred, logvar_true)  # Compare with the true logvar
         loss = mse_mu + mse_logvar
         return loss
     
