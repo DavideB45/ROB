@@ -11,12 +11,12 @@ if __name__ == "__main__":
 
     # Initialize the VAE model
     latent_dim = 200
-    vae_model = VAE(latent_dim=latent_dim)
-    vae_model.load_state_dict(torch.load("vae_model.pth", map_location=device))
+    vae_model = VAE(latent_dim=latent_dim).to(device)
+    vae_model.load_state_dict(torch.load("models/vae_final_model.pth", map_location=device))
     vae_model.eval()  # Set the model to evaluation mode
 
     # Create the dataset
-    dataset = Dataset("dataset", "no_obj", vae_model, seq_len=30)
+    dataset = Dataset("dataset", "no_obj", vae_model, seq_len=24)
 
     # Get training and validation sets
     train_set, val_set = dataset.get_training_set(), dataset.get_validation_set()
@@ -24,7 +24,7 @@ if __name__ == "__main__":
 
 
     # Initialize the LSTM model
-    lstm_model = MuLogvarLSTM(embedding_dim=latent_dim, hidden_dim=256, num_layers=1, dropout=0.1).to(device)
+    lstm_model = MuLogvarLSTM(embedding_dim=latent_dim, hidden_dim=512, num_layers=2, dropout=0.1).to(device)
     lstm_model.load_state_dict(torch.load("models/lstm_final_model.pth", map_location=device))
     lstm_model.eval()  # Set the model to evaluation mode
 
@@ -54,8 +54,8 @@ if __name__ == "__main__":
 
     print("Running inference with no teacher forcing...")
     # take a sample from the dataset
-    sample_mu = sample_mu[:, :5, :].float().to(device)
-    sample_logvar = sample_logvar[:, :5, :].float().to(device)
+    sample_mu = sample_mu[:, :2, :].float().to(device)
+    sample_logvar = sample_logvar[:, :2, :].float().to(device)
     sample_act = sample_act.float().to(device)
     mu, logvar = lstm_model.predict(sample_mu, sample_logvar, sample_act)
 

@@ -102,8 +102,8 @@ class Dataset(torch.utils.data.Dataset):
             vision_vae (VAE): The VAE model for vision data.
         """
         # encode the dataset to get input of the LSTM
-        vision = torch.tensor(vision, dtype=torch.float32).to(device)
-        vision = vision.permute(0, 3, 1, 2).contiguous()  # Change to (batch_size, channels, height, width)
+        vision = torch.tensor(vision, dtype=torch.float32)  # Convert to tensor
+        vision = vision.permute(0, 3, 1, 2).contiguous().to(device)  # Change to (batch_size, channels, height, width)
         world_embedding = vision_vae.encode(vision)
         # divide the dataset into section of duration 10 frames
         self.data = []
@@ -146,7 +146,7 @@ class Dataset(torch.utils.data.Dataset):
             sc = self.sc_MU
         elif type == "LOGVAR":
             sc = self.sc_LOGVAR
-        return sc.inverse_transform(data.detach().numpy())
+        return sc.inverse_transform(data.detach().cpu().numpy())
     
     def get_training_set(self):
         return self.tr
