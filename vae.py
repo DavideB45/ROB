@@ -4,6 +4,7 @@ import torch
 from torch import nn, optim
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
+from helpers.resBlock import ResidualBlock
 
 
 
@@ -14,78 +15,53 @@ class VAE(nn.Module):
         super().__init__()
         self.latent_dim = latent_dim
 
-        # -------- Encoder --------
-        # Input: Batch x 3 x 64 x 64
-        self.enc_conv1 = nn.Conv2d(3, 32, kernel_size=4, stride=2, padding=1)  # Output: Batch x 32 x 32 x 32
-        self.batch_norm1 = nn.BatchNorm2d(32)  # Batch normalization after first conv layer
-        self.enc_conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1) # Output: Batch x 64 x 16 x 16
-        self.batch_norm2 = nn.BatchNorm2d(64)  # Batch normalization after second conv layer
-        self.enc_conv3 = nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1) # Output: Batch x 128 x 8 x 8
-        self.batch_norm3 = nn.BatchNorm2d(128)  # Batch normalization after third conv layer
+        # ---------- Encoder ----------
+        self.encoder = nn.Sequential(
+            ResidualBlock(3, 32, downsample=True),   # 64x64 → 32x32
+            ResidualBlock(32, 64, downsample=True),  # 32x32 → 16x16
+            ResidualBlock(64, 128, downsample=True), # 16x16 → 8x8
+            ResidualBlock(128, 256, downsample=True) # 8x8 → 4x4
+        )
+        self.enc_fc = nn.Linear(256 * 4 * 4, 512)
+        self.fc_mu = nn.Linear(512, latent_dim)
+        self.fc_logvar = nn.Linear(512, latent_dim)
 
-        self.flattened_size = 128 * 8 * 8  # 8192
-        self.fc_hidden_dim = 512 # Intermediate dimension for FC layers
+        # ---------- Decoder ----------
+        self.dec_fc = nn.Linear(latent_dim, 512)
+        self.dec_expand = nn.Linear(512, 256 * 4 * 4)
 
-        self.enc_fc_1 = nn.Linear(self.flattened_size, self.fc_hidden_dim)
-        self.batch_norm_fc_1 = nn.BatchNorm1d(self.fc_hidden_dim)  # Batch normalization for FC layer
-        self.enc_fc = nn.Linear(self.fc_hidden_dim, self.fc_hidden_dim)
-        self.batch_norm_fc = nn.BatchNorm1d(self.fc_hidden_dim)
-        self.fc_mu = nn.Linear(self.fc_hidden_dim, latent_dim)
-        self.fc_logvar = nn.Linear(self.fc_hidden_dim, latent_dim)
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(256, 128, 4, 2, 1),  # 4x4 → 8x8
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, 4, 2, 1),   # 8x8 → 16x16
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, 4, 2, 1),    # 16x16 → 32x32
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 3, 4, 2, 1),     # 32x32 → 64x64
+        )
 
-        # -------- Decoder --------
-        self.dec_fc1 = nn.Linear(latent_dim, self.fc_hidden_dim)
-        self.batch_norm_dec_fc1 = nn.BatchNorm1d(self.fc_hidden_dim)  # Batch normalization for FC layer
-        self.dec_fc2 = nn.Linear(self.fc_hidden_dim, self.flattened_size)
-        self.batch_norm_dec_fc2 = nn.BatchNorm1d(self.flattened_size)  # Batch normalization for second FC layer
-        
-        # Input: Batch x 128 x 8 x 8 (after reshape)
-        self.dec_deconv1 = nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1)  # Output: Batch x 64 x 16 x 16
-        self.batch_norm_dec_deconv1 = nn.BatchNorm2d(64)
-        self.dec_deconv2 = nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1)  # Output: Batch x 32 x 32 x 32
-        self.batch_norm_dec_deconv2 = nn.BatchNorm2d(32)
-        self.dec_deconv3 = nn.ConvTranspose2d(32, 32, kernel_size=4, stride=2, padding=1)   # Output: Batch x 3 x 64 x 64
-        self.batch_norm_dec_deconv3 = nn.BatchNorm2d(32)  # Batch normalization for last deconv layer
-        self.dec_output = nn.Conv2d(32, 3, kernel_size=3, stride=1, padding=1)  # Final output layer
 
     # ---- Helper sub‑functions ----
-    def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        h = F.relu(self.enc_conv1(x))
-        h = self.batch_norm1(h)  # Apply batch normalization
-        h = F.relu(self.enc_conv2(h))
-        h = self.batch_norm2(h)  # Apply batch normalization
-        h = F.relu(self.enc_conv3(h))
-        h = self.batch_norm3(h)  # Apply batch normalization
-        h = h.view(x.size(0), -1)  # Flatten
-        h = F.relu(self.enc_fc_1(h))
-        h = self.batch_norm_fc_1(h)  # Apply batch normalization
+    def encode(self, x):
+        h = self.encoder(x)
+        h = h.view(x.size(0), -1)
         h = F.relu(self.enc_fc(h))
-        h = self.batch_norm_fc(h)  # Apply batch normalization
         return self.fc_mu(h), self.fc_logvar(h)
     
-    def decode(self, z: torch.Tensor) -> torch.Tensor:
-        h = F.relu(self.dec_fc1(z))
-        h = self.batch_norm_dec_fc1(h)  # Apply batch normalization
-        h = F.relu(self.dec_fc2(h))
-        h = self.batch_norm_dec_fc2(h)  # Apply batch normalization
-        h = h.view(-1, 128, 8, 8)  # Reshape to match deconv input
-        h = F.relu(self.dec_deconv1(h))
-        h = self.batch_norm_dec_deconv1(h)  # Apply batch normalization
-        h = F.relu(self.dec_deconv2(h))
-        h = self.batch_norm_dec_deconv2(h)
-        h = F.relu(self.dec_deconv3(h))
-        h = self.batch_norm_dec_deconv3(h)
-        return F.sigmoid(self.dec_output(h))  # Sigmoid activation for output layer
+    def decode(self, z):
+        h = F.relu(self.dec_fc(z))
+        h = F.relu(self.dec_expand(h)).view(-1, 256, 4, 4)
+        return self.decoder(h)
 
-    @staticmethod
-    def reparameterize(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
+    def reparameterize(self, mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
-
-    # ---- Forward pass ----
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, x):
         mu, logvar = self.encode(x)
         z = self.reparameterize(mu, logvar)
         recon = self.decode(z)
@@ -96,8 +72,7 @@ class VAE(nn.Module):
 # ------------- Loss -------------
 
 def create_purple_weight_map_rgb(x: torch.Tensor,
-                                 purple_weight: float = 10.0,
-                                 dominance_margin: float = 0.1) -> torch.Tensor:
+                                 purple_weight: float = 2.0) -> torch.Tensor:
     """
     Creates a weight map that emphasizes purple pixels, working directly in RGB.
 
@@ -115,15 +90,10 @@ def create_purple_weight_map_rgb(x: torch.Tensor,
     if x.dim() != 4 or x.shape[1] != 3:
         raise ValueError(f"Input tensor must be in (B, 3, H, W) format, but got {x.shape}")
 
-    # Unpack the RGB channels
     # x shape is (Batch, Channels, Height, Width)
     red_channel = x[:, 0, :, :]
     green_channel = x[:, 1, :, :]
     blue_channel = x[:, 2, :, :]
-
-    # The rule for being "purple": Red and Blue are dominant over Green.
-    # The dominance_margin makes the rule stricter.
-    # The mask will be a boolean tensor of shape (B, H, W).
     is_purple_mask = (red_channel > 70/255) & \
                      (green_channel > 60/255) & \
                      (blue_channel > 100/255) & \
@@ -137,39 +107,57 @@ def create_purple_weight_map_rgb(x: torch.Tensor,
     # plt.title("Purple Mask Visualization")
     # plt.axis('off')
     # plt.show()
-    # Ensure the mask is on the same device as x
 
-    # Create the weight map, starting with a base weight of 1.0 for all pixels.
     weights = torch.ones_like(is_purple_mask, dtype=torch.float32, device=x.device)
-
-    # Apply the higher weight to the pixels that match our "purple" rule.
     weights[is_purple_mask] = purple_weight
-
     # Add a channel dimension for broadcasting against the loss tensor.
     # The shape becomes (B, 1, H, W), which can be multiplied with (B, 3, H, W).
     return weights.unsqueeze(1)
 
-def vae_loss(recon_x: torch.Tensor, x: torch.Tensor, mu: torch.Tensor, logvar: torch.Tensor, purple_weight: float = 2.0, dominance_margin: float = 0.1) -> torch.Tensor:
+def vae_loss(recon_x: torch.Tensor, x: torch.Tensor, 
+             mu: torch.Tensor, logvar: torch.Tensor, kl_weight:float=1.0,
+            perceptual_loss_fn = None, perc_weight:float=1.0,
+            purple_weight:float = 2) -> torch.Tensor:
     """Binary cross entropy + KL divergence, averaged per mini batch."""
-    weight_in_map = create_purple_weight_map_rgb(x, purple_weight, dominance_margin)
-    weight_out_map = create_purple_weight_map_rgb(recon_x, purple_weight, dominance_margin)
-    bce = F.mse_loss(recon_x, x, reduction="none")
-    # Apply the weight map to the BCE loss
-    bce = (bce * (weight_in_map + weight_out_map)/2).sum()
-    kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    return (bce + 0.1*kld) / x.size(0)
+    tot_loss = 0.0
+    if perceptual_loss_fn is not None:
+        perc_loss = perceptual_loss_fn(recon_x, x)
+        tot_loss += perc_weight * perc_loss
+    if purple_weight > 0:
+        bce = F.mse_loss(recon_x, x, reduction="none")
+        weight_in_map = create_purple_weight_map_rgb(x, purple_weight)
+        weight_out_map = create_purple_weight_map_rgb(recon_x, purple_weight)
+        bce = (bce * (weight_in_map + weight_out_map)/2).mean()
+        tot_loss += bce
+    else:
+        tot_loss += F.binary_cross_entropy_with_logits(recon_x, x, reduction="mean")
+    kld = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+    tot_loss += kl_weight * kld
+    return tot_loss
 
 
 # ---------- Train / Test loops ----------
 
-def train_epoch(model: VAE, loader: DataLoader, optimizer: optim.Optimizer, device: torch.device) -> float:
+def train_epoch(model: VAE,
+                loader: DataLoader, 
+                optimizer: optim.Optimizer, 
+                device: torch.device, 
+                kl_weight:float=1.0,
+                perceptual_loss_fn = None,
+                perc_weight:float=1.0,
+                purple_weight:float = 2.0
+                ) -> float:
     model.train()
     epoch_loss = 0.0
     for x in loader:
         x = x.to(device)
         optimizer.zero_grad()
         recon, mu, logvar = model(x)
-        loss = vae_loss(recon, x, mu, logvar)
+        loss = vae_loss(recon, x, 
+                        mu, logvar, kl_weight,
+                        perceptual_loss_fn, perc_weight,
+                        purple_weight=purple_weight
+                        )
         loss.backward()
         optimizer.step()
         epoch_loss += loss.item() * x.size(0)
