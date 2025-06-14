@@ -3,7 +3,7 @@ import torch
 from vae import VAE, vae_loss, train_epoch, test_epoch
 import random
 import matplotlib.pyplot as plt
-from utils_proj import get_best_device, show_datasets
+from helpers.utils_proj import get_best_device, show_datasets
 
 dataset:Dataset = Dataset(
     path="dataset",
@@ -21,7 +21,8 @@ def train_model():
     train_losses = []
     test_losses = []
     for epoch in range(num_epochs):
-        train_loss = train_epoch(model, train_loader, optimizer, device)
+        kl_weight = min(1.0, epoch / (num_epochs * 0.7))  # gradually increase KL weight
+        train_loss = train_epoch(model, train_loader, optimizer, device, kl_weight=0.1)
         test_loss = test_epoch(model, test_loader, device)
         print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
         train_losses.append(train_loss)
@@ -93,6 +94,6 @@ def test_model(name: str = "vae_model.pth"):
 
 
 if __name__ == "__main__":
-    #train_model()
+    train_model()
     #show_datasets()
     test_model("vae_model.pth")
