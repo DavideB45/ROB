@@ -4,6 +4,7 @@ from vae import VAE, vae_loss, train_epoch, test_epoch
 import random
 import matplotlib.pyplot as plt
 from helpers.utils_proj import get_best_device, show_datasets
+from helpers.perceptualLoss import VGGPerceptualLoss
 
 dataset:Dataset = Dataset(
     path="dataset",
@@ -14,6 +15,8 @@ device = get_best_device()
 
 def train_model():
     model = VAE(latent_dim=200).to(device)
+    perceptual_loss_fn = VGGPerceptualLoss().to(device)  # Initialize perceptual loss function
+    perceptual_loss_fn = None
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     train_loader = torch.utils.data.DataLoader(dataset.get_training_set()[0], batch_size=16, shuffle=True)
     test_loader = torch.utils.data.DataLoader(dataset.get_validation_set()[0], batch_size=64, shuffle=False)
@@ -22,7 +25,13 @@ def train_model():
     test_losses = []
     for epoch in range(num_epochs):
         kl_weight = min(1.0, epoch / (num_epochs * 0.7))  # gradually increase KL weight
-        train_loss = train_epoch(model, train_loader, optimizer, device, kl_weight=0.1)
+        train_loss = train_epoch(model, train_loader, 
+                                 optimizer, device, 
+                                 kl_weight=0.1,
+                                 perceptual_loss_fn=perceptual_loss_fn,
+                                 perc_weight=0.1,
+                                 purple_weight=2.0
+                                 )
         test_loss = test_epoch(model, test_loader, device)
         print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
         train_losses.append(train_loss)
@@ -94,6 +103,6 @@ def test_model(name: str = "vae_model.pth"):
 
 
 if __name__ == "__main__":
-    train_model()
+    #train_model()
     #show_datasets()
     test_model("vae_model.pth")

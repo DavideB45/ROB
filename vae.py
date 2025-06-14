@@ -33,13 +33,13 @@ class VAE(nn.Module):
         self.decoder = nn.Sequential(
             nn.ConvTranspose2d(256, 128, 4, 2, 1),  # 4x4 → 8x8
             nn.BatchNorm2d(128),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.ConvTranspose2d(128, 64, 4, 2, 1),   # 8x8 → 16x16
             nn.BatchNorm2d(64),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.ConvTranspose2d(64, 32, 4, 2, 1),    # 16x16 → 32x32
             nn.BatchNorm2d(32),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.ConvTranspose2d(32, 3, 4, 2, 1),     # 32x32 → 64x64
         )
 
@@ -48,12 +48,12 @@ class VAE(nn.Module):
     def encode(self, x):
         h = self.encoder(x)
         h = h.view(x.size(0), -1)
-        h = F.relu(self.enc_fc(h))
+        h = F.leaky_relu(self.enc_fc(h))
         return self.fc_mu(h), self.fc_logvar(h)
     
     def decode(self, z):
-        h = F.relu(self.dec_fc(z))
-        h = F.relu(self.dec_expand(h)).view(-1, 256, 4, 4)
+        h = F.leaky_relu(self.dec_fc(z))
+        h = F.leaky_relu(self.dec_expand(h)).view(-1, 256, 4, 4)
         return self.decoder(h)
 
     def reparameterize(self, mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:

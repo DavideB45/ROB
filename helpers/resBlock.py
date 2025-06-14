@@ -18,7 +18,7 @@ class ResidualBlock(nn.Module):
             )
 
     def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
+        out = F.leaky_relu(self.bn1(self.conv1(x)))
         out = self.bn2(self.conv2(out))
         out += self.skip(x)
-        return F.relu(out)
+        return F.leaky_relu(out)
