@@ -12,7 +12,7 @@ import random
 sys.path.append(os.path.dirname(os.path.dirname("..")))
 
 from vae import VAE
-from utils_proj import get_best_device
+from helpers.utils_proj import get_best_device
 
 device = get_best_device()
 
