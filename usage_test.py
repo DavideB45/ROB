@@ -1,7 +1,7 @@
 from vae import VAE
 from lstm_model import MuLogvarLSTM
 from dataset.ordered_dataloader import Dataset
-from utils_proj import get_best_device, image_list_to_gif
+from helpers.utils_proj import get_best_device, image_list_to_gif
 import torch
 
 if __name__ == "__main__":
@@ -12,11 +12,12 @@ if __name__ == "__main__":
     # Initialize the VAE model
     latent_dim = 200
     vae_model = VAE(latent_dim=latent_dim).to(device)
-    vae_model.load_state_dict(torch.load("models/vae_final_model.pth", map_location=device))
+    "models/vae_final_model.pth"
+    vae_model.load_state_dict(torch.load("vae_model.pth", map_location=device))
     vae_model.eval()  # Set the model to evaluation mode
 
     # Create the dataset
-    dataset = Dataset("dataset", "no_obj", vae_model, seq_len=24)
+    dataset = Dataset("dataset", "no_obj", vae_model, seq_len=12)
 
     # Get training and validation sets
     train_set, val_set = dataset.get_training_set(), dataset.get_validation_set()
@@ -42,14 +43,13 @@ if __name__ == "__main__":
         mu[i] = torch.tensor(mu[i], dtype=torch.float32).to(device)
         logvar[i] = torch.tensor(logvar[i], dtype=torch.float32).to(device)
 
-    img_sequence = []
+    img_sequence_true = []
     for i in range(len(mu)):
         z = vae_model.reparameterize(mu[i], logvar[i])
         img = vae_model.decode(z).squeeze(0).cpu().detach().numpy()
-        img_sequence.append(img)
+        img_sequence_true.append(img)
     
-    # Save the image sequence as a GIF
-    image_list_to_gif(img_sequence, "output_sequence_true.gif", duration=100)
+    
 
 
     print("Running inference with no teacher forcing...")
@@ -65,11 +65,13 @@ if __name__ == "__main__":
         mu[i] = torch.tensor(mu[i], dtype=torch.float32).to(device)
         logvar[i] = torch.tensor(logvar[i], dtype=torch.float32).to(device)
 
-    img_sequence = []
+    img_sequence_sim = []
     for i in range(len(mu)):
         z = vae_model.reparameterize(mu[i], logvar[i])
         img = vae_model.decode(z).squeeze(0).cpu().detach().numpy()
-        img_sequence.append(img)
+        img_sequence_sim.append(img)
     
     # Save the image sequence as a GIF
-    image_list_to_gif(img_sequence, "output_sequence_sim.gif", duration=100)
+    image_list_to_gif(img_sequence_true[2:], "output_sequence_true.gif", duration=100)
+    # Save the image sequence as a GIF
+    image_list_to_gif(img_sequence_sim[2:], "output_sequence_sim.gif", duration=100)

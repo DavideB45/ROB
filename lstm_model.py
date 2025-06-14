@@ -48,8 +48,8 @@ class MuLogvarLSTM(nn.Module):
         out = self.batch_norm_2(out.transpose(1, 2)).transpose(1, 2)
         out = relu(self.fc_2(out))
         out = self.batch_norm_3(out.transpose(1, 2)).transpose(1, 2)
-        mu = self.fc_mu(out) + x[:, :, :self.embedding_dim]
-        logvar = self.fc_logvar(out) + x[:, :, self.embedding_dim:2*self.embedding_dim]
+        mu = self.fc_mu(out) #+ x[:, :, :self.embedding_dim]
+        logvar = self.fc_logvar(out)# + x[:, :, self.embedding_dim:2*self.embedding_dim]
         return mu, logvar, (h_t, h_t)
         
 

@@ -2,16 +2,16 @@ import torch
 from vae import VAE
 from lstm_model import MuLogvarLSTM
 from dataset.ordered_dataloader import Dataset
-from utils_proj import device
+from helpers.utils_proj import device
 import matplotlib.pyplot as plt
 
 LATENT_DIM = 200
-VAE_NAME = "vae_model_final.pth"
+VAE_NAME = "vae_model.pth"
 "models/vae_final_model.pth"
 def main():
 
 	model = VAE(latent_dim=LATENT_DIM).to(device)
-	model.load_state_dict(torch.load("models/vae_final_model.pth", map_location=device))
+	model.load_state_dict(torch.load(VAE_NAME, map_location=device))
 	ds = Dataset("dataset", "no_obj", model, seq_len=20)
 	tr, vs = ds.get_training_set(), ds.get_validation_set()
 	lstm_model = MuLogvarLSTM(embedding_dim=LATENT_DIM, hidden_dim=512, num_layers=2, dropout=0).to(device)
@@ -36,12 +36,12 @@ def main():
 		losses["train"].append(epoch_tr_loss)
 		losses["validation"].append(epoch_vs_loss)
 
-	for i in range(10):
+	for i in range(4):
 		print(f"Training LSTM model without teacher forcing an len {(i + 1)*2}...")
 		ds = Dataset("dataset", "no_obj", model, seq_len=(i + 1)*2)
 		tr, vs = ds.get_training_set(), ds.get_validation_set()
 		optimizer = torch.optim.Adam(lstm_model.parameters(), lr=0.0001, weight_decay=0e-3)
-		for epoch in range(100):
+		for epoch in range(50):
 			epoch_tr_loss = lstm_model.train_epoch(tr_loader, optimizer, device, teacher_forcing=False)
 			epoch_vs_loss = lstm_model.test_epoch(vs_loader, device, teacher_forcing=False)
 			print(f"Epoch {epoch+1}: Train Loss: {epoch_tr_loss:.4f}, Validation Loss: {epoch_vs_loss:.4f}")
