@@ -130,7 +130,7 @@ class Dataset(torch.utils.data.Dataset):
         # Convert data to tensors
         print("Splitting data into training and validation sets...")
         randomstate = random.randint(0, 1000)
-        randomstate = 42
+        #randomstate = 42
         self.tr, self.vs = train_test_split(self.data, test_size=0.1, random_state=randomstate)
         vision_blocked = []
         for i in range(0, len(vision) - self.seq_len, self.seq_len):

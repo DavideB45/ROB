@@ -3,6 +3,7 @@ from vae import VAE
 from lstm_model import MuLogvarLSTM
 from dataset.ordered_dataloader import Dataset
 from helpers.utils_proj import device
+import random
 import matplotlib.pyplot as plt
 
 LATENT_DIM = 200
@@ -22,7 +23,8 @@ def main():
 	}
 	lstm_model.train()
 	
-	for i in [4, 12, 20]:
+	random_numbers = [random.randint(4, 20) for _ in range(10)]
+	for i in random_numbers:
 		print(f"Training LSTM model without teacher forcing an len {i}...")
 		ds = Dataset("dataset", "no_obj", model, seq_len=i)
 		tr, vs = ds.get_training_set(), ds.get_validation_set()
@@ -35,6 +37,9 @@ def main():
 			print(f"Epoch {epoch+1}: Train Loss: {epoch_tr_loss:.4f}, Validation Loss: {epoch_vs_loss:.4f}")
 			losses["train"].append(epoch_tr_loss)
 			losses["validation"].append(epoch_vs_loss)
+			if epoch > 20 and epoch_vs_loss > max(losses["validation"][-6:-1]):
+				print("Early stopping triggered.")
+				break
 
 	for i in []:
 		print(f"Training LSTM model without teacher forcing an len {i}...")
