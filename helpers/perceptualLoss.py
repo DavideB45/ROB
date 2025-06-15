@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from torchvision import models, transforms
 import torch.nn as nn
+from torchvision.models.vgg import VGG16_Weights
 
 class VGGPerceptualLoss(nn.Module):
     def __init__(self, resize=True, layer_ids=(3, 8, 15), weights=None):
@@ -11,7 +12,7 @@ class VGGPerceptualLoss(nn.Module):
             weights: optional weighting for each layer loss.
         """
         super().__init__()
-        self.vgg = models.vgg16(pretrained=True).features.eval()
+        self.vgg = models.vgg16(weights=VGG16_Weights.DEFAULT).features.eval()
         for param in self.vgg.parameters():
             param.requires_grad = False
 

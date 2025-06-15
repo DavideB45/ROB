@@ -13,11 +13,11 @@ if __name__ == "__main__":
     latent_dim = 200
     vae_model = VAE(latent_dim=latent_dim).to(device)
     "models/vae_final_model.pth"
-    vae_model.load_state_dict(torch.load("vae_model.pth", map_location=device))
+    vae_model.load_state_dict(torch.load("vae_model_foundation_kl04_l2e4.pth", map_location=device))
     vae_model.eval()  # Set the model to evaluation mode
 
     # Create the dataset
-    dataset = Dataset("dataset", "no_obj", vae_model, seq_len=14)
+    dataset = Dataset("dataset", "no_obj", vae_model, seq_len=40)
 
     # Get training and validation sets
     train_set = dataset.get_training_set()
@@ -55,8 +55,8 @@ if __name__ == "__main__":
 
     print("Running inference with no teacher forcing...")
     # take a sample from the dataset
-    sample_mu = sample_mu[:, :2, :].float().to(device)
-    sample_logvar = sample_logvar[:, :2, :].float().to(device)
+    sample_mu = sample_mu[:, :4, :].float().to(device)
+    sample_logvar = sample_logvar[:, :4, :].float().to(device)
     sample_act = sample_act.float().to(device)
     mu, logvar = lstm_model.predict(sample_mu, sample_logvar, sample_act)
 
@@ -82,8 +82,8 @@ if __name__ == "__main__":
         img_sequence_ref.append(img)
 
     # Save the image sequence as a GIF
-    image_list_to_gif(img_sequence_ref[3:], "output_sequence_ref.gif", duration=100)
+    image_list_to_gif(img_sequence_ref[:], "output_sequence_ref.gif", duration=100)
     # Save the image sequence as a GIF
-    image_list_to_gif(img_sequence_sensed[3:], "output_sequence_sensed.gif", duration=100)
+    image_list_to_gif(img_sequence_sensed[:], "output_sequence_sensed.gif", duration=100)
     # Save the image sequence as a GIF
-    image_list_to_gif(img_sequence_sim[3:], "output_sequence_sim.gif", duration=100)
+    image_list_to_gif(img_sequence_sim[:], "output_sequence_sim.gif", duration=100)

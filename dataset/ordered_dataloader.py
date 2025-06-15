@@ -129,12 +129,14 @@ class Dataset(torch.utils.data.Dataset):
         """Split the dataset into training and validation sets."""
         # Convert data to tensors
         print("Splitting data into training and validation sets...")
-        self.tr, self.vs = train_test_split(self.data, test_size=0.01, random_state=42)
+        randomstate = random.randint(0, 1000)
+        randomstate = 42
+        self.tr, self.vs = train_test_split(self.data, test_size=0.1, random_state=randomstate)
         vision_blocked = []
         for i in range(0, len(vision) - self.seq_len, self.seq_len):
             vision_blocked.append(vision[i:i + self.seq_len])
         vision_blocked = np.array(vision_blocked)
-        self.tr_ref, self.vs_ref = train_test_split(vision_blocked, test_size=0.01, random_state=42)
+        self.tr_ref, self.vs_ref = train_test_split(vision_blocked, test_size=0.1, random_state=randomstate)
  
     def rescale(self, data:torch.Tensor, type:str) -> np.ndarray:
         """Rescale the data based on its type.
