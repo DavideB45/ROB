@@ -19,13 +19,15 @@ class MuLogvarLSTM(nn.Module):
         self.embedding_dim = embedding_dim
         self.prep_fc = Linear(embedding_dim*2 + 6, embedding_dim*2 + 6)  # mu(t) + logvar(t) + act(t-1) + act(t)
         self.batch_norm_prep = BatchNorm1d(embedding_dim*2 + 6)
-        self.lstm = LSTM(input_size=embedding_dim*2 + 6, # mu(t) + logvar(t) + act(t-1) + act(t) 
+        self.prep_fc2 = Linear(embedding_dim*2 + 6, embedding_dim*2)
+        self.batch_norm_prep2 = BatchNorm1d(embedding_dim*2)
+        self.lstm = LSTM(input_size=embedding_dim*2,
                          hidden_size=hidden_dim, 
                          num_layers=num_layers,
                          dropout=dropout, 
                          batch_first=True)
         self.batch_norm_1 = BatchNorm1d(hidden_dim)
-        self.fc_1 = Linear(hidden_dim, hidden_dim)  # lstm_out, (h_t, c_t)
+        self.fc_1 = Linear(hidden_dim + embedding_dim*2, hidden_dim)  # lstm_out + embedding_dim*2
         self.batch_norm_2 = BatchNorm1d(hidden_dim)
         self.fc_2 = Linear(hidden_dim, hidden_dim)  # lstm_out, (h_t, c_t)
         self.batch_norm_3 = BatchNorm1d(hidden_dim)
@@ -42,14 +44,17 @@ class MuLogvarLSTM(nn.Module):
         """
         out = relu(self.prep_fc(x))  # Prepare the input
         out = self.batch_norm_prep(out.transpose(1, 2)).transpose(1, 2)  # Apply batch normalization
-        out, (h_t, h_t) = self.lstm(x) if h_t is None else self.lstm(x, (h_t, h_t))
+        out = relu(self.prep_fc2(out))  # Prepare the input
+        skip = self.batch_norm_prep2(out.transpose(1, 2)).transpose(1, 2)  # Apply batch normalization
+        out, (h_t, h_t) = self.lstm(skip) if h_t is None else self.lstm(skip, (h_t, h_t))
         out = self.batch_norm_1(out.transpose(1, 2)).transpose(1, 2)  # Apply batch normalization
+        out = torch.cat((out, skip), dim=-1)  # Concatenate the skip connection
         out = relu(self.fc_1(out))
         out = self.batch_norm_2(out.transpose(1, 2)).transpose(1, 2)
         out = relu(self.fc_2(out))
         out = self.batch_norm_3(out.transpose(1, 2)).transpose(1, 2)
-        mu = self.fc_mu(out) #+ x[:, :, :self.embedding_dim]
-        logvar = self.fc_logvar(out)# + x[:, :, self.embedding_dim:2*self.embedding_dim]
+        mu = self.fc_mu(out) + x[:, :, :self.embedding_dim]
+        logvar = self.fc_logvar(out) + x[:, :, self.embedding_dim:2*self.embedding_dim]
         return mu, logvar, (h_t, h_t)
         
 
@@ -121,7 +126,7 @@ class MuLogvarLSTM(nn.Module):
         mu_pred, logvar_pred, _ = self.forward(x)  # Forward pass through the LSTM
         mse_mu = mse_loss(mu_pred, mu[:, 1:, :].to(device))  # Compare with the true mu
         mse_logvar = mse_loss(logvar_pred, logvar[:, 1:, :].to(device))  # Compare with the true logvar
-        loss = mse_mu + mse_logvar
+        loss = mse_mu + mse_logvar + self.kl_divergence(mu_pred, logvar_pred)  # Add KL divergence term
         return loss
     
     def forward_predicting(self, mu, logvar, act, device:torch.device='cpu'):
@@ -158,7 +163,7 @@ class MuLogvarLSTM(nn.Module):
         logvar_pred = torch.stack(logvar_pred, dim=1)  # (batch_size, seq_len_pred-1, embedding_dim)
         mse_mu = mse_loss(mu_pred, mu_true)  # Compare with the true mu
         mse_logvar = mse_loss(logvar_pred, logvar_true)  # Compare with the true logvar
-        loss = mse_mu + mse_logvar
+        loss = mse_mu + mse_logvar + self.kl_divergence(mu_pred, logvar_pred)  # Add KL divergence term
         return loss
     
     def forward_light_predicting(self, mu, logvar, act, device:torch.device='cpu'):
@@ -174,31 +179,48 @@ class MuLogvarLSTM(nn.Module):
         mu = mu.float().contiguous().to(device)  # Ensure the tensor is contiguous in memory
         logvar = logvar.float().contiguous().to(device)  # Ensure the tensor is contiguous in memory
         act = act.float().contiguous().to(device)  # Ensure the tensor is contiguous in memory
-        mu_true = mu[:, 1:, :] #- mu[:, :-1, :] # compute target mu
-        logvar_true = logvar[:, 1:, :] #- logvar[:, :-1, :] # compute target logvar
 
-        mu_1 = mu[:, 0, :]  # Get the first mu
-        logvar_1 = logvar[:, 0, :]  # Get the first logvar
-        mu_pred, logvar_pred = [], []
-        h_t, c_t = None, None  # For LSTM hidden state
+        mu_target_last_step = mu[:, -1, :]
+        logvar_target_last_step = logvar[:, -1, :]
+        current_mu = mu[:, 0, :]
+        current_logvar = logvar[:, 0, :]
+        
+        h_t, c_t = None, None  # Initialize LSTM hidden and cell states
+
+        # Iterate through the sequence of actions to make predictions step-by-step
+        # The loop runs act.shape[1] - 1 times.
+        # After the loop, current_mu and current_logvar will hold the prediction for the final step.
         for t in range(act.shape[1] - 1):
             act_t = act[:, t, :]
             act_t1 = act[:, t + 1, :]
-            #print(f"t: {t}, act_t: {act_t.shape}, act_t1: {act_t1.shape}, mu_1: {mu_1.shape}, logvar_1: {logvar_1.shape}")
-            lstm_input = torch.cat([mu_1, logvar_1, act_t, act_t1], dim=-1).unsqueeze(1)  # (batch_size, 1, embedding_dim*2 + act_dim)
-            mu_1, logvar_1, (h_t, c_t) = self.forward(lstm_input, h_t, c_t)  # Forward pass through the LSTM
-            mu_1 = mu_1.squeeze(1)  # Remove the sequence dimension
-            logvar_1 = logvar_1.squeeze(1)  # Remove the sequence dimension
-            mu_pred.append(mu_1)  # Append the predicted mu
-            logvar_pred.append(logvar_1)  # Append the predicted logvar
-        mu_pred = torch.stack(mu_pred, dim=1)  # (batch_size, seq_len_pred-1, embedding_dim)
-        logvar_pred = torch.stack(logvar_pred, dim=1)  # (batch_size, seq_len_pred-1, embedding_dim)
-        mse_mu = mse_loss(mu_pred[:, -1, :], mu_true[:, -1, :])  # Compare with the true mu, only last element
-        mse_logvar = mse_loss(logvar_pred[:, -1, :], logvar_true[:, -1, :])  # Compare with the true logvar, only last element
-        loss = mse_mu + mse_logvar
+            
+            lstm_input = torch.cat([current_mu, current_logvar, act_t, act_t1], dim=-1).unsqueeze(1)
+            predicted_mu_step, predicted_logvar_step, (h_t, c_t) = self.forward(lstm_input, h_t, c_t) if h_t is not None else self.forward(lstm_input)
+            current_mu = predicted_mu_step.squeeze(1)
+            current_logvar = predicted_logvar_step.squeeze(1)
+
+        mse_mu = mse_loss(current_mu, mu_target_last_step)
+        mse_logvar = mse_loss(current_logvar, logvar_target_last_step)
+        loss = mse_mu + mse_logvar + self.kl_divergence(current_mu, current_logvar)  # Add KL divergence term
         return loss
     
-    def forward_wrapper(self, mu, logvar, act, teacher_forcing:bool=True, device:torch.device='cpu'):
+    def kl_divergence(self, mu:torch.Tensor, logvar:torch.Tensor):
+        """
+        Compute the KL divergence between the predicted and true distributions.
+        Args:
+            mu (torch.Tensor): Mean tensor of shape (batch_size, seq_len, embedding_dim).
+            logvar (torch.Tensor): Log variance tensor of shape (batch_size, seq_len, embedding_dim).
+        Returns:
+            torch.Tensor: KL divergence value.
+        """
+        # new shape is (batch_size* seq_len, embedding_dim)
+        mu = mu.view(-1, mu.size(-1))  # Flatten the tensor
+        logvar = logvar.view(-1, logvar.size(-1))
+        # Compute KL divergence
+        kld = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp(), dim=0)
+        return kld.mean()*0
+    
+    def forward_wrapper(self, mu, logvar, act, teacher_forcing:bool=True, full_error:bool=False, device:torch.device='cpu'):
         """
         Forward pass for training.
         Args:
@@ -208,12 +230,17 @@ class MuLogvarLSTM(nn.Module):
             float: The loss value.
         """
         if teacher_forcing:
+            if full_error:
+                raise ValueError("Teacher forcing with full error is not supported.")
             return self.forward_teacher_forcing(mu, logvar, act, device=device)
         else:
-            return self.forward_light_predicting(mu, logvar, act, device=device) 
+            if full_error:
+                return self.forward_predicting(mu, logvar, act, device=device)
+            else:
+                return self.forward_light_predicting(mu, logvar, act, device=device) 
 
 
-    def train_epoch(self, tr_loader, optimizer, device, teacher_forcing:bool=True):
+    def train_epoch(self, tr_loader, optimizer, device, teacher_forcing:bool=True, full_error:bool=False):
         '''
         Train the model for one epoch.
         Args:
@@ -228,13 +255,13 @@ class MuLogvarLSTM(nn.Module):
         tot_loss = 0.0
         for mu, logvar, act in tr_loader:
             optimizer.zero_grad()
-            loss = self.forward_wrapper(mu, logvar, act, teacher_forcing=teacher_forcing, device=device)
+            loss = self.forward_wrapper(mu, logvar, act, teacher_forcing=teacher_forcing, device=device, full_error=full_error)
             loss.backward()
             optimizer.step()
             tot_loss += loss.item() * mu.size(0)
         return tot_loss / len(tr_loader.dataset)    
 
-    def test_epoch(self, vs_loader, device, teacher_forcing:bool=True):
+    def test_epoch(self, vs_loader, device, teacher_forcing:bool=True, full_error:bool=False):
         """
         Test the model for one epoch.
         Args:
@@ -248,6 +275,6 @@ class MuLogvarLSTM(nn.Module):
         tot_loss = 0.0
         with torch.no_grad():
             for mu, logvar, act in vs_loader:
-                loss = self.forward_wrapper(mu, logvar, act, teacher_forcing=teacher_forcing, device=device)
+                loss = self.forward_wrapper(mu, logvar, act, teacher_forcing=teacher_forcing, device=device, full_error=full_error)
                 tot_loss += loss.item() * mu.size(0)
         return tot_loss / len(vs_loader.dataset)
