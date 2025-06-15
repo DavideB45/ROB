@@ -1,33 +1,44 @@
 from dataset.dataloader import Dataset
 import torch
-from vae import VAE, vae_loss, train_epoch, test_epoch
+from vae import VAE, train_epoch, test_epoch, compute_kld
 import random
 import matplotlib.pyplot as plt
 from helpers.utils_proj import get_best_device, show_datasets
 from helpers.perceptualLoss import VGGPerceptualLoss
+from tqdm import tqdm
+import numpy as np
 
+np.random.seed(42)
 dataset:Dataset = Dataset(
     path="dataset",
     condition="no_obj"
 )
 device = get_best_device()
+LATENT_DIM = 200
+MODEL_NAME = "vae_model.pth"
 
 
-def train_model():
-    model = VAE(latent_dim=200).to(device)
-    perceptual_loss_fn = VGGPerceptualLoss().to(device)  # Initialize perceptual loss function
+def train_model(resume:str = None):
+
+    model = VAE(latent_dim=LATENT_DIM).to(device)
+    if resume is not None:
+        model.load_state_dict(torch.load(resume, map_location=device))
+        print(f"Resuming training from {resume}")
+    else:
+        print("Starting training from scratch.")
+    perceptual_loss_fn = VGGPerceptualLoss(layer_ids=(3, 8)).to(device)  # Initialize perceptual loss function
     perceptual_loss_fn = None
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=2e-4)
     train_loader = torch.utils.data.DataLoader(dataset.get_training_set()[0], batch_size=16, shuffle=True)
     test_loader = torch.utils.data.DataLoader(dataset.get_validation_set()[0], batch_size=64, shuffle=False)
-    num_epochs = 40
+    num_epochs = 20
     train_losses = []
     test_losses = []
-    for epoch in range(num_epochs):
+    for epoch in tqdm(range(num_epochs), desc="Epochs"):
         kl_weight = min(1.0, epoch / (num_epochs * 0.7))  # gradually increase KL weight
         train_loss = train_epoch(model, train_loader, 
                                  optimizer, device, 
-                                 kl_weight=0.1,
+                                 kl_weight=0.4,
                                  perceptual_loss_fn=perceptual_loss_fn,
                                  perc_weight=0.1,
                                  purple_weight=2.0
@@ -53,11 +64,9 @@ def train_model():
     plt.legend()
     plt.grid()
     plt.tight_layout()
-    # Save the model
-    #torch.save(model.state_dict(), "vae_model.pth")
 
 def test_model(name: str = "vae_model.pth"):
-    model = VAE(latent_dim=200).to(device)
+    model = VAE(latent_dim=LATENT_DIM).to(device)
     model.load_state_dict(torch.load(name))
     model.eval()
     
@@ -101,8 +110,26 @@ def test_model(name: str = "vae_model.pth"):
     plt.tight_layout(rect=[0, 0, 1, 0.96]) # Adjust layout to make space for suptitle
     plt.show()
 
+def test_kld(name: str = "vae_model.pth",
+            num_samples:int = 100,
+            latent_dim:int = 200):
+    model = VAE(latent_dim=latent_dim).to(device)
+    model.load_state_dict(torch.load(name))
+
+    model.eval()
+    kld_values = []
+    with torch.no_grad():
+        for _ in range(num_samples):
+            # Generate random input
+            x = torch.randn(1, 3, 64, 64).to(device)
+            recon, mu, logvar = model(x)
+            kld = compute_kld(mu, logvar)
+            kld_values.append(kld.item())
+    avg_kld = sum(kld_values) / len(kld_values)
+    print(f"Average KLD over {num_samples} samples: {avg_kld:.4f}")
 
 if __name__ == "__main__":
-    #train_model()
+    train_model("vae_model_foundation_kl03.pth")
     #show_datasets()
-    test_model("vae_model.pth")
+    test_model(MODEL_NAME)
+    test_kld(MODEL_NAME, num_samples=100, latent_dim=LATENT_DIM)

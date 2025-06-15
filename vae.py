@@ -127,13 +127,18 @@ def vae_loss(recon_x: torch.Tensor, x: torch.Tensor,
         bce = F.mse_loss(recon_x, x, reduction="none")
         weight_in_map = create_purple_weight_map_rgb(x, purple_weight)
         weight_out_map = create_purple_weight_map_rgb(recon_x, purple_weight)
-        bce = (bce * (weight_in_map + weight_out_map)/2).mean()
-        tot_loss += bce
+        bce = (bce * (weight_in_map + weight_out_map)/2).sum()
+        tot_loss += bce / x.size(0)  # Average over the batch
     else:
-        tot_loss += F.binary_cross_entropy_with_logits(recon_x, x, reduction="mean")
+        tot_loss += F.mse_loss(recon_x, x, reduction="sum") / x.size(0)
     kld = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
     tot_loss += kl_weight * kld
     return tot_loss
+
+def compute_kld(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
+    """Compute the KL divergence between the learned distribution and a standard normal distribution."""
+    kld = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+    return kld
 
 
 # ---------- Train / Test loops ----------
