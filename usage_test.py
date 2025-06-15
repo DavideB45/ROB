@@ -17,12 +17,13 @@ if __name__ == "__main__":
     vae_model.eval()  # Set the model to evaluation mode
 
     # Create the dataset
-    dataset = Dataset("dataset", "no_obj", vae_model, seq_len=12)
+    dataset = Dataset("dataset", "no_obj", vae_model, seq_len=14)
 
     # Get training and validation sets
-    train_set, val_set = dataset.get_training_set(), dataset.get_validation_set()
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True)
-
+    train_set = dataset.get_training_set()
+    train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=False)
+    train_set_ref = dataset.get_training_set_ref()
+    train_set_ref_loader = torch.utils.data.DataLoader(train_set_ref, batch_size=1, shuffle=False)
 
     # Initialize the LSTM model
     lstm_model = MuLogvarLSTM(embedding_dim=latent_dim, hidden_dim=512, num_layers=2, dropout=0.1).to(device)
@@ -43,11 +44,11 @@ if __name__ == "__main__":
         mu[i] = torch.tensor(mu[i], dtype=torch.float32).to(device)
         logvar[i] = torch.tensor(logvar[i], dtype=torch.float32).to(device)
 
-    img_sequence_true = []
+    img_sequence_sensed = []
     for i in range(len(mu)):
         z = vae_model.reparameterize(mu[i], logvar[i])
         img = vae_model.decode(z).squeeze(0).cpu().detach().numpy()
-        img_sequence_true.append(img)
+        img_sequence_sensed.append(img)
     
     
 
@@ -71,7 +72,18 @@ if __name__ == "__main__":
         img = vae_model.decode(z).squeeze(0).cpu().detach().numpy()
         img_sequence_sim.append(img)
     
+    sample_img = train_set_ref_loader.__iter__().__next__()
+    img_sequence_ref = []
+    # shape is (batch_size, seq_len, w, h, c)
+    print(f"Sample image shape: {sample_img[0].shape}")
+    for i in range(sample_img[0].shape[0]):
+        img = sample_img[0][i]
+        img = img.permute(2, 0, 1)
+        img_sequence_ref.append(img)
+
     # Save the image sequence as a GIF
-    image_list_to_gif(img_sequence_true[2:], "output_sequence_true.gif", duration=100)
+    image_list_to_gif(img_sequence_ref[3:], "output_sequence_ref.gif", duration=100)
     # Save the image sequence as a GIF
-    image_list_to_gif(img_sequence_sim[2:], "output_sequence_sim.gif", duration=100)
+    image_list_to_gif(img_sequence_sensed[3:], "output_sequence_sensed.gif", duration=100)
+    # Save the image sequence as a GIF
+    image_list_to_gif(img_sequence_sim[3:], "output_sequence_sim.gif", duration=100)

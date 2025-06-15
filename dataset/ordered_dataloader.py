@@ -34,7 +34,7 @@ class Dataset(torch.utils.data.Dataset):
         act = act[:-2] # different to account for previous action
         print(f"pos shape: {pos.shape}, vision shape: {vision.shape}, act shape: {act.shape}")
         self.setup_dataset(vision, act, vision_vae)
-        self.split_data()
+        self.split_data(vision)
         
     def get_data(self, path:str, condition:str) -> tuple:
         """Load and preprocess data from the specified path and condition.
@@ -102,9 +102,13 @@ class Dataset(torch.utils.data.Dataset):
             vision_vae (VAE): The VAE model for vision data.
         """
         # encode the dataset to get input of the LSTM
+        print("Setting up dataset...")
         vision = torch.tensor(vision, dtype=torch.float32)  # Convert to tensor
         vision = vision.permute(0, 3, 1, 2).contiguous().to(device)  # Change to (batch_size, channels, height, width)
-        world_embedding = vision_vae.encode(vision)
+        with torch.no_grad():
+            world_embedding = vision_vae.encode(vision)
+        #memory efficient encoding
+        print("Encodes vision")
         # divide the dataset into section of duration 10 frames
         self.data = []
         self.sc_MU = StandardScaler()
@@ -118,12 +122,19 @@ class Dataset(torch.utils.data.Dataset):
             if len(mu_frames) == self.seq_len and len(act_frames) == self.seq_len:
                 self.data.append((mu_frames, logvar_frames, act_frames))
             else:
-                print(f"Skipping incomplete frame set at index {i}: {len(mu_frames)} frames, {len(act_frames)} actions")       
+                print(f"Skipping incomplete frame set at index {i}: {len(mu_frames)} frames, {len(act_frames)} actions")  
+        print(f"Dataset created with {len(self.data)} samples.")     
     
-    def split_data(self):
+    def split_data(self, vision:np.ndarray) -> None:
         """Split the dataset into training and validation sets."""
         # Convert data to tensors
+        print("Splitting data into training and validation sets...")
         self.tr, self.vs = train_test_split(self.data, test_size=0.01, random_state=42)
+        vision_blocked = []
+        for i in range(0, len(vision) - self.seq_len, self.seq_len):
+            vision_blocked.append(vision[i:i + self.seq_len])
+        vision_blocked = np.array(vision_blocked)
+        self.tr_ref, self.vs_ref = train_test_split(vision_blocked, test_size=0.01, random_state=42)
  
     def rescale(self, data:torch.Tensor, type:str) -> np.ndarray:
         """Rescale the data based on its type.
@@ -151,8 +162,14 @@ class Dataset(torch.utils.data.Dataset):
     def get_training_set(self):
         return self.tr
     
+    def get_training_set_ref(self):
+        return self.tr_ref
+    
     def get_validation_set(self):
         return self.vs
+    
+    def get_validation_set_ref(self):
+        return self.vs_ref
     
     def __len__(self):
         return len(self.data)
