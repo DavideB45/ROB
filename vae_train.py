@@ -1,6 +1,6 @@
 from dataset.dataloader import Dataset
 import torch
-from vae import VAE, train_epoch, test_epoch, compute_kld
+from vae_model import VAE, train_epoch, test_epoch, compute_kld
 import random
 import matplotlib.pyplot as plt
 from helpers.utils_proj import get_best_device, show_datasets

@@ -1,5 +1,5 @@
 import torch
-from vae import VAE
+from vae_model import VAE
 from lstm_model import MuLogvarLSTM
 from dataset.ordered_dataloader import Dataset
 from helpers.utils_proj import device
