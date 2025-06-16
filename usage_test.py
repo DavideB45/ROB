@@ -14,7 +14,9 @@ if __name__ == "__main__":
     latent_dim = 200
     vae_model = VAE(latent_dim=latent_dim).to(device)
     "models/vae_final_model.pth"
-    vae_model.load_state_dict(torch.load("vae_model_foundation_kl04_l2e4.pth", map_location=device))
+    "vae_model_foundation_kl04_l2e4_ed200.pth"
+    "vae_model_foundation_kl04_l3e4_ed90.pth"
+    vae_model.load_state_dict(torch.load("vae_model_foundation_kl04_l2e4_ed200.pth", map_location=device))
     vae_model.eval()  # Set the model to evaluation mode
 
     # Create the dataset
@@ -26,13 +28,15 @@ if __name__ == "__main__":
     train_set_ref = dataset.get_validation_set_ref()
     train_set_ref_loader = torch.utils.data.DataLoader(train_set_ref, batch_size=1, shuffle=False)
     i = len(train_set) // 2  # Get a sample from the middle of the dataset
+    i = random.randint(0, len(train_set) - 1)  # Randomly select a sample index
     print(f"Using sample index: {i} of {len(train_set)}")
     sample_mu, sample_logvar, sample_act = list(train_loader)[i]
     sample_img = list(train_set_ref_loader)[i]
 
     # Initialize the LSTM model
     lstm_model = MuLogvarLSTM(embedding_dim=latent_dim, hidden_dim=512, num_layers=2, dropout=0.1).to(device)
-    lstm_model.load_state_dict(torch.load("models/lstm_final_model.pth", map_location=device))
+    lstm_model.load_state_dict(torch.load("models/lstm_final_model_200.pth", map_location=device))
+    print(f"Model # of parameters: {sum(p.numel() for p in lstm_model.parameters() if p.requires_grad)}")
     lstm_model.eval()  # Set the model to evaluation mode
 
     print("Running inference with teacher forcing...")

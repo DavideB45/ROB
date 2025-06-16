@@ -14,7 +14,7 @@ dataset:Dataset = Dataset(
     condition="no_obj"
 )
 device = get_best_device()
-LATENT_DIM = 200
+LATENT_DIM = 90
 MODEL_NAME = "vae_model.pth"
 
 
@@ -26,9 +26,10 @@ def train_model(resume:str = None):
         print(f"Resuming training from {resume}")
     else:
         print("Starting training from scratch.")
+    print(f"Model # of params: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
     perceptual_loss_fn = VGGPerceptualLoss(layer_ids=(3, 8)).to(device)  # Initialize perceptual loss function
     perceptual_loss_fn = None
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=2e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=3e-4)
     train_loader = torch.utils.data.DataLoader(dataset.get_training_set()[0], batch_size=16, shuffle=True)
     test_loader = torch.utils.data.DataLoader(dataset.get_validation_set()[0], batch_size=64, shuffle=False)
     num_epochs = 20
@@ -43,7 +44,8 @@ def train_model(resume:str = None):
                                  perc_weight=0.1,
                                  purple_weight=2.0
                                  )
-        test_loss = test_epoch(model, test_loader, device)
+        test_loss = test_epoch(model, test_loader, 
+                               device)
         print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
         train_losses.append(train_loss)
         test_losses.append(test_loss)
@@ -129,7 +131,7 @@ def test_kld(name: str = "vae_model.pth",
     print(f"Average KLD over {num_samples} samples: {avg_kld:.4f}")
 
 if __name__ == "__main__":
-    train_model("vae_model_foundation_kl03.pth")
+    train_model("vae_model_foundation_kl04_l3e4_ed90.pth")
     #show_datasets()
     test_model(MODEL_NAME)
     test_kld(MODEL_NAME, num_samples=100, latent_dim=LATENT_DIM)
