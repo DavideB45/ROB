@@ -28,7 +28,6 @@ class Dataset(torch.utils.data.Dataset):
         # they have len 7322
         print(f"vision shape: {vision.shape}, act shape: {act.shape}")
         # remove 2 frames (to be divisible by 10)
-        print(f"pos shape: {pos.shape}, vision shape: {vision.shape}, act shape: {act.shape}")
         pos = pos[1:-1]
         vision = vision[1:-1]
         act = act[:-2] # different to account for previous action
@@ -63,7 +62,6 @@ class Dataset(torch.utils.data.Dataset):
         """
         # Build the complete path and open the file
         path_final = os.path.join(path,"trial_"+str(trial+1)+"_"+condition+".pkl")
-        print("Loading data from: ", path_final)
         f = gzip.open(path_final,"rb")
         # Read the file contents
         time = pickle.load(f)
@@ -108,7 +106,6 @@ class Dataset(torch.utils.data.Dataset):
         with torch.no_grad():
             world_embedding = vision_vae.encode(vision)
         #memory efficient encoding
-        print("Encodes vision")
         # divide the dataset into section of duration 10 frames
         self.data = []
         self.sc_MU = StandardScaler()
@@ -123,20 +120,19 @@ class Dataset(torch.utils.data.Dataset):
                 self.data.append((mu_frames, logvar_frames, act_frames))
             else:
                 print(f"Skipping incomplete frame set at index {i}: {len(mu_frames)} frames, {len(act_frames)} actions")  
-        print(f"Dataset created with {len(self.data)} samples.")     
     
     def split_data(self, vision:np.ndarray) -> None:
         """Split the dataset into training and validation sets."""
-        # Convert data to tensors
-        print("Splitting data into training and validation sets...")
-        randomstate = random.randint(0, 1000)
-        #randomstate = 42
-        self.tr, self.vs = train_test_split(self.data, test_size=0.1, random_state=randomstate)
+        #self.tr, self.vs = train_test_split(self.data, test_size=0.1, random_state=42)
+        split_idx = int(len(self.data) * 0.9)
+        self.tr = self.data[:split_idx]
+        self.vs = self.data[split_idx:]
         vision_blocked = []
         for i in range(0, len(vision) - self.seq_len, self.seq_len):
             vision_blocked.append(vision[i:i + self.seq_len])
         vision_blocked = np.array(vision_blocked)
-        self.tr_ref, self.vs_ref = train_test_split(vision_blocked, test_size=0.1, random_state=randomstate)
+        self.tr_ref = vision_blocked[:split_idx]
+        self.vs_ref = vision_blocked[split_idx:]
  
     def rescale(self, data:torch.Tensor, type:str) -> np.ndarray:
         """Rescale the data based on its type.

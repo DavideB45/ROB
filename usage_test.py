@@ -1,3 +1,4 @@
+import random
 from vae import VAE
 from lstm_model import MuLogvarLSTM
 from dataset.ordered_dataloader import Dataset
@@ -17,13 +18,17 @@ if __name__ == "__main__":
     vae_model.eval()  # Set the model to evaluation mode
 
     # Create the dataset
-    dataset = Dataset("dataset", "no_obj", vae_model, seq_len=40)
+    dataset = Dataset("dataset", "no_obj", vae_model, seq_len=44)
 
     # Get training and validation sets
-    train_set = dataset.get_training_set()
+    train_set = dataset.get_validation_set()
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=False)
-    train_set_ref = dataset.get_training_set_ref()
+    train_set_ref = dataset.get_validation_set_ref()
     train_set_ref_loader = torch.utils.data.DataLoader(train_set_ref, batch_size=1, shuffle=False)
+    i = len(train_set) // 2  # Get a sample from the middle of the dataset
+    print(f"Using sample index: {i} of {len(train_set)}")
+    sample_mu, sample_logvar, sample_act = list(train_loader)[i]
+    sample_img = list(train_set_ref_loader)[i]
 
     # Initialize the LSTM model
     lstm_model = MuLogvarLSTM(embedding_dim=latent_dim, hidden_dim=512, num_layers=2, dropout=0.1).to(device)
@@ -32,7 +37,6 @@ if __name__ == "__main__":
 
     print("Running inference with teacher forcing...")
     # take a sample from the dataset
-    sample_mu, sample_logvar, sample_act = train_loader.__iter__().__next__()
     sample_mu = sample_mu.float().to(device)
     sample_logvar = sample_logvar.float().to(device)
     sample_act = sample_act.float().to(device)
@@ -72,7 +76,6 @@ if __name__ == "__main__":
         img = vae_model.decode(z).squeeze(0).cpu().detach().numpy()
         img_sequence_sim.append(img)
     
-    sample_img = train_set_ref_loader.__iter__().__next__()
     img_sequence_ref = []
     # shape is (batch_size, seq_len, w, h, c)
     print(f"Sample image shape: {sample_img[0].shape}")

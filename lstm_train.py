@@ -23,7 +23,7 @@ def main():
 	}
 	lstm_model.train()
 	
-	random_numbers = [random.randint(4, 20) for _ in range(10)]
+	random_numbers = [4, 10, 8, 16, 5, 20, 7, 12, 14, 6]
 	for i in random_numbers:
 		print(f"Training LSTM model without teacher forcing an len {i}...")
 		ds = Dataset("dataset", "no_obj", model, seq_len=i)
@@ -34,11 +34,11 @@ def main():
 		for epoch in range(320):
 			epoch_tr_loss = lstm_model.train_epoch(tr_loader, optimizer, device, teacher_forcing=False)
 			epoch_vs_loss = lstm_model.test_epoch(vs_loader, device, teacher_forcing=False)
-			print(f"Epoch {epoch+1}: Train Loss: {epoch_tr_loss:.4f}, Validation Loss: {epoch_vs_loss:.4f}")
+			print(f"Epoch {(epoch+1):3d}: Train Loss: {epoch_tr_loss:.4f}, Validation Loss: {epoch_vs_loss:.4f}", end="\r")
 			losses["train"].append(epoch_tr_loss)
 			losses["validation"].append(epoch_vs_loss)
-			if epoch > 20 and epoch_vs_loss > max(losses["validation"][-6:-1]):
-				print("Early stopping triggered.")
+			if epoch > 10 and epoch_vs_loss > max(losses["validation"][-6:-1]):
+				print("\nEarly stopping triggered.\n")
 				break
 
 	for i in []:
