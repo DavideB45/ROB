@@ -3,7 +3,7 @@ from fc_vae import FC_VAE
 from dataset.m_dataloader import MDataset
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
-from helpers.utils_proj import get_best_device
+from helpers.utils_proj import get_best_device, plot_loss
 import time
 
 device = get_best_device()
@@ -66,17 +66,6 @@ def train(model: FC_VAE, train_loader: DataLoader, val_loader: DataLoader, optim
         print(f'Epoch {(epoch+1):3d}/{epochs}, Train Loss: {avg_tr_loss:.4f}, Val Loss: {avg_vl_loss:.4f}', end='\r')
     print() # Newline after training is complete
     return history
-
-def plot_loss(history: dict):
-    '''Plot the training and validation loss.'''
-    plt.figure(figsize=(10, 5))
-    plt.plot(history['train_loss'], label='Train Loss')
-    plt.plot(history['val_loss'], label='Validation Loss')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.title('Training and Validation Loss')
-    plt.legend()
-    plt.show()
 
 
 def main():
