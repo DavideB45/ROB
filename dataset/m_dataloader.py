@@ -64,7 +64,14 @@ class MDataset(torch.utils.data.Dataset):
 		FORCE = self.sc_FORCE.fit_transform(FORCE)
 		self.sc_ACT = StandardScaler()
 		ACT = self.sc_ACT.fit_transform(ACT)
-		VISION = VISION/255.        
+		VISION = VISION/255.
+		# Convert to torch tensors
+		POS = torch.tensor(POS, dtype=torch.float32)
+		FORCE = torch.tensor(FORCE, dtype=torch.float32)
+		VISION = torch.tensor(VISION, dtype=torch.float32)
+		ACT = torch.tensor(ACT, dtype=torch.float32)
+		# Reshape VISION to match the expected input shape (N, C, H
+		VISION = VISION.permute(0, 3, 1, 2).contiguous()
 		return (POS,FORCE,VISION,ACT)
 	
 	def get_VAE_loaders(self, types:list[str], test_perc:float = 0.1, batch_size:int=32, shuffle:bool=True) -> tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
