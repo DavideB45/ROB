@@ -44,7 +44,9 @@ def main():
 
 	num_epochs = 100
 	losses = {'train_loss': [], 'val_loss': []}
-	for epoch in tqdm.trange(num_epochs, desc="Epochs"):
+	train_loss = 0.0
+	val_loss = 0.0
+	for epoch in tqdm.trange(num_epochs, desc="Epochs", unit="epoch", postfix={'train_loss': train_loss, 'val_loss': val_loss}):
 		train_loss = model.train_epoch(train_loader, ['VISION', 'POS'], optimizer, beta=BETA, device=device)
 		val_loss = model.test_epoch(val_loader, ['VISION', 'POS'], beta=BETA, device=device)
 		print(f'Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}')
@@ -82,5 +84,5 @@ def try_use_model(name: str):
 		return None
 	
 if __name__ == "__main__":
-	#main()
+	main()
 	try_use_model("moe_vae_model.pth")
