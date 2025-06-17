@@ -16,7 +16,7 @@ if __name__ == "__main__":
     "models/vae_final_model.pth"
     "vae_model_foundation_kl04_l2e4_ed200.pth"
     "vae_model_foundation_kl04_l3e4_ed90.pth"
-    vae_model.load_state_dict(torch.load("vae_model_foundation_kl04_l2e4_ed200.pth", map_location=device))
+    vae_model.load_state_dict(torch.load("models/vae_model_foundation_kl04_l2e4_ed200.pth", map_location=device))
     vae_model.eval()  # Set the model to evaluation mode
 
     # Create the dataset

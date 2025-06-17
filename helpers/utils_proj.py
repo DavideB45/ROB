@@ -1,6 +1,7 @@
 import torch
 from dataset.dataloader import Dataset
 from PIL import Image
+import matplotlib.pyplot as plt
 
 def get_best_device() -> torch.device:
     """
@@ -46,7 +47,7 @@ def image_list_to_gif(image_list, filename, duration=100):
             img_tensor = img_tensor.cpu().numpy()  # Move to CPU and convert to numpy
         if img_tensor.ndim == 3:  # Ensure the image is in (C, H, W) format
             img_tensor = img_tensor.transpose(1, 2, 0)  # Convert to (H, W, C)
-        pil_image = Image.fromarray((img_tensor * 255).astype('uint8'))  # Convert to PIL Image
+        pil_image = Image.fromarray((img_tensor.clip(0, 1) * 255).astype('uint8'))  # Clip, scale, and convert to PIL Image
         pil_images.append(pil_image)
     if not pil_images:
         raise ValueError("No valid images to save as GIF.")
@@ -54,3 +55,55 @@ def image_list_to_gif(image_list, filename, duration=100):
     image_list = pil_images
     image_list[0].save(filename, save_all=True, append_images=image_list[1:], duration=duration, loop=0)
     print(f"GIF saved as {filename}")
+
+def show_image(image_tensor):
+    """
+    Display a single image tensor.
+    Args:
+        image_tensor (torch.Tensor): Image tensor of shape (C, H, W)
+    """
+    if isinstance(image_tensor, torch.Tensor):
+        image_tensor = image_tensor.cpu().numpy()  # Move to CPU and convert to numpy
+    if image_tensor.ndim == 3:  # Ensure the image is in (C, H, W) format
+        image_tensor = image_tensor.transpose(1, 2, 0)  # Convert to (H, W, C)
+    plt.imshow(image_tensor)
+    plt.axis('off')  # Hide axes
+    plt.show()
+
+def save_image(image_tensor, filename):
+    """
+    Save a single image tensor to a file.
+    Args:
+        image_tensor (torch.Tensor): Image tensor of shape (C, H, W)
+        filename (str): Output filename for the image.
+    """
+    if isinstance(image_tensor, torch.Tensor):
+        image_tensor = image_tensor.cpu().numpy()  # Move to CPU and convert to numpy
+    if image_tensor.ndim == 3:  # Ensure the image is in (C, H, W) format
+        image_tensor = image_tensor.transpose(1, 2, 0)  # Convert to (H, W, C)
+    pil_image = Image.fromarray(image_tensor.clip(0, 1) * 255).astype('uint8')  # Clip to [0,1], scale, convert to PIL Image
+    pil_image.save(filename)
+    print(f"Image saved as {filename}")
+
+def plot_loss(history: dict, title: str = 'Loss Curve', xlabel: str = 'Epochs', ylabel: str = 'Loss', save_path: str = None):
+    '''
+    Plot the training and validation loss.
+    Args:
+        history (dict): Dictionary containing 'train_loss' and 'val_loss'.
+    Returns:
+        None
+    '''
+    plt.figure(figsize=(10, 5))
+    plt.plot(history['train_loss'], label='Train Loss')
+    plt.plot(history['val_loss'], label='Validation Loss')
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.grid(True)
+    if save_path:
+        plt.savefig(save_path)
+        print(f"Loss plot saved as {save_path}")
+    else:
+        print("Loss plot not saved, no save path provided.")
+    plt.legend()
+    plt.show()
