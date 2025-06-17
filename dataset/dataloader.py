@@ -210,11 +210,11 @@ class Dataset(torch.utils.data.Dataset):
     
 def main():
     # Path to data location
-    path = "Workspace/data"
+    path = "dataset/"
     scenario = "no_obj"
     
     # Build the training and validation datasets
     feature_set = Dataset(path,scenario)
     
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    main()

@@ -131,7 +131,7 @@ def test_kld(name: str = "vae_model.pth",
     print(f"Average KLD over {num_samples} samples: {avg_kld:.4f}")
 
 if __name__ == "__main__":
-    train_model("vae_model_foundation_kl04_l3e4_ed90.pth")
+    train_model("models/vae_model_foundation_kl04_l3e4_ed90.pth")
     #show_datasets()
     test_model(MODEL_NAME)
     test_kld(MODEL_NAME, num_samples=100, latent_dim=LATENT_DIM)
