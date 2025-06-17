@@ -10,13 +10,6 @@ import matplotlib.pyplot as plt
 import random
 import cv2
 
-if torch.cuda.is_available():
-	device = 'cuda'
-elif torch.backends.mps.is_available():
-	device = 'mps'
-else:
-	device = 'cpu'
-
 class MDataset(torch.utils.data.Dataset):
 	def __init__(self, path, condition):
 		# Get simulation data
@@ -112,20 +105,14 @@ class MDataset(torch.utils.data.Dataset):
 			sc = self.sc_ACT
 		return sc.inverse_transform(data.detach().numpy())
 	
-	def get_samples(self,start,end):
-		return self.X[start:end], self.Y[start:end], self.ACT[start:end]
-	
-	def get_training_set(self):
-		return self.X_train, self.Y_train, self.cX_train
-	
-	def get_validation_set(self):
-		return self.X_val, self.Y_val, self.cX_val
-	
 	def __len__(self):
-		return len(self.Y_train)
+		return len(self.self.vision)
 	
 	def __getitem__(self, index):
-		return self.X_train[index], self.Y_train[index], self.cX_train[index]
+		return (self.vision[index],
+				self.position[index],
+				self.FORCE[index],
+				self.cond_input[index])
 	
 def main():
 	# Path to data location

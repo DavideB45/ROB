@@ -53,10 +53,11 @@ class FC_VAE(nn.Module):
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
     
-    def loss_function(self, x, mu, logvar, beta=1.0):
+    def loss_function(self, recon_x, x, mu, logvar, beta: float = 1.0):
         # Reconstruction loss
-        recon_loss = F.mse_loss(x, self.decode(mu), reduction='sum')
-        # KL divergence loss
-        kld_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) * beta
+        recon_loss = F.mse_loss(recon_x, x, reduction='sum')
+        recon_loss = recon_loss / x.size(0)
+        kld_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+        kld_loss = kld_loss * beta
         
         return recon_loss + kld_loss
