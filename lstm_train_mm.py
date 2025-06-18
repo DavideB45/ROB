@@ -1,0 +1,58 @@
+from moe_vae import MoE_VAE, load_mmvae_model
+from dataset.m_dataloader import MDataset
+import torch
+from lstm_model import MuLogvarLSTM
+from helpers.utils_proj import device, plot_loss
+from tqdm import trange
+
+EPOCHS = 100
+BATCH_SIZE = 128
+LEARNING_RATE = 0.001
+LATENT_DIM = 200
+
+dataset = MDataset("./dataset", "no_obj")
+model = load_mmvae_model("./models/moe_vae_model.pth", 20, LATENT_DIM)
+model.to(device)
+dataset.prepare_hidden_sequence(model, seq_len=10, device=device)
+lstm_model = MuLogvarLSTM(
+    embedding_dim=LATENT_DIM,
+    hidden_dim=512,
+    num_layers=2,
+    dropout=0.1
+).to(device)
+optimizer = torch.optim.Adam(lstm_model.parameters(), lr=LEARNING_RATE, weight_decay=0.0001)
+
+losses = {
+    "train": [],
+    "validation": []
+}
+
+
+random_numbers = [4, 10, 8, 16, 5, 20, 7, 12, 14, 6]
+for i in random_numbers:
+    print(f"Training LSTM model without teacher forcing an len {i}...")
+    dataset.prepare_hidden_sequence(model, seq_len=i, device=device)
+    tr_loader, vl_loader = dataset.get_sequence_loaders(test_perc=0.1, batch_size=BATCH_SIZE, shuffle=True)
+    epoch_tr_loss = 0.0
+    epoch_vs_loss = 0.0
+    for epoch in trange(EPOCHS, desc=f"SeqLen {i}", unit="epoch", colour="green"):
+        epoch_tr_loss = lstm_model.train_epoch(tr_loader, optimizer, device, teacher_forcing=False)
+        epoch_vs_loss = lstm_model.test_epoch(vl_loader, device, teacher_forcing=False)
+        losses["train"].append(epoch_tr_loss)
+        losses["validation"].append(epoch_vs_loss)
+        print(f"Epoch {epoch+1}/{EPOCHS} - Train Loss: {epoch_tr_loss:.4f} - Val Loss: {epoch_vs_loss:.4f}")
+        # early stopping criteria
+        if epoch > 10 and epoch_vs_loss > max(losses["validation"][-6:-1]):
+            print("\nEarly stopping triggered.\n")
+            break
+        # Save model if validation loss improves
+        if epoch == 0 or epoch_vs_loss < min(losses["validation"][:-1]):
+            torch.save(lstm_model.state_dict(), f"./models/lstm_model_mm_{LATENT_DIM}.pth")
+            print(f"\nModel saved for sequence length {i}.")
+
+# Plot the losses
+plot_loss(losses, "LSTM Training Losses", "Epochs", "Loss",
+          save_path="./models/lstm_training_losses_mm.png",
+          legend=True, title="LSTM Training Losses")
+
+
