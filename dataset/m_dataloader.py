@@ -1,14 +1,13 @@
 import torch
 import pandas as pd
 import numpy as np
-import os
+import os, sys
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 import gzip
 import pickle
-import matplotlib.pyplot as plt
-import random
-import cv2
+sys.path.append(os.path.dirname(os.path.dirname("..")))
+from moe_vae import MoE_VAE, create_mmvae_model
 
 class MDataset(torch.utils.data.Dataset):
 	def __init__(self, path, condition):
@@ -97,9 +96,58 @@ class MDataset(torch.utils.data.Dataset):
 		train_loader = torch.utils.data.DataLoader(X_train, batch_size=batch_size, shuffle=shuffle)
 		val_loader = torch.utils.data.DataLoader(X_val, batch_size=batch_size, shuffle=False)
 		return train_loader, val_loader
+
+	def prepare_hidden_sequence(self, mmvae: MoE_VAE, seq_len:int, device: str = "cpu"):
+		"""Prepare the hidden sequence for the LSTM."""
+		#encode values
+		with torch.no_grad():
+			mmvae.eval()
+			mu, logvar = mmvae.encode(self.vision.to(device), self.position.to(device))
+		# Rescale mu and logvar
+		self.sc_MU = StandardScaler()
+		mu = self.sc_MU.fit_transform(mu.detach().cpu().numpy())
+		self.sc_LOGVAR = StandardScaler()
+		logvar = self.sc_LOGVAR.fit_transform(logvar.detach().cpu().numpy())
+		# remove the first frame since we need previous action for LSTM input
+		mu = mu[1:]
+		logvar = logvar[1:]
+		self.sequence = []
+		self.visual_ref = []
+		for i in range(0, len(mu) - seq_len, seq_len):
+			mu_frames = mu[i:i + seq_len]
+			logvar_frames = logvar[i:i + seq_len]
+			act_frames = self.cond_input[i:i + seq_len]
+			if len(mu_frames) == seq_len and len(act_frames) == seq_len:
+				self.sequence.append((mu_frames, logvar_frames, act_frames))
+				self.visual_ref.append(self.vision[i+1:i+1 + seq_len])
+			else:
+				print(f"Skipping incomplete frame set at index {i}: {len(mu_frames)} frames, {len(act_frames)} actions")
+		self.seq_len = seq_len
+
+	def get_sequence_loaders(self, test_perc: float = 0.1, batch_size: int = 32, shuffle: bool = True) -> tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
+		"""Get DataLoaders for the prepared hidden sequence."""
+		if not hasattr(self, 'sequence'):
+			raise ValueError("Hidden sequence not prepared. Call prepare_hidden_sequence first.")
+		
+		split_idx = int(len(self.sequence) * (1 - test_perc))
+		train_data = self.sequence[:split_idx]
+		val_data = self.sequence[split_idx:]
+		visual_ref_val = self.visual_ref[split_idx:]
+		train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=shuffle)
+		val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, shuffle=False)
+
+		self.visual_ref = []
+		for i in range(0, len(visual_ref_val), batch_size):
+			self.visual_ref.append(visual_ref_val[i:i + batch_size])
+		return train_loader, val_loader
+	
+	def get_visual_reference(self) -> np.ndarray:
+		"""Get visual reference for validation."""
+		if not hasattr(self, 'visual_ref'):
+			raise ValueError("Visual reference not prepared. Call get_sequence_loaders first.")
+		return self.visual_ref
 		
 
-	
 	def rescale(self, data, type):
 		if type == "VISION" or type == "FLOW":
 			data = data*255.
@@ -110,6 +158,10 @@ class MDataset(torch.utils.data.Dataset):
 			sc = self.sc_FORCE
 		elif type == "ACT":
 			sc = self.sc_ACT
+		elif type == "MU":
+			sc = self.sc_MU
+		elif type == "LOGVAR":
+			sc = self.sc_LOGVAR
 		return sc.inverse_transform(data.detach().numpy())
 	
 	def __len__(self):
@@ -144,6 +196,31 @@ def main():
 		print("Validation Position batch shape:", pos.shape)
 		print("Validation Force batch shape:", forc.shape)
 		print("Validation Action batch shape:", act.shape)
+		break
+
+	print()
+
+	# Prepare the hidden sequence for the LSTM
+	latent_dim = 20
+	mmvae = create_mmvae_model(
+		proprioception_input_dim=20,
+		latent_dim=latent_dim
+	)
+	feature_set.prepare_hidden_sequence(mmvae, seq_len=10, device="cpu")
+	# Get the sequence loaders
+	train_seq_loader, val_seq_loader = feature_set.get_sequence_loaders(test_perc=0.1, batch_size=32, shuffle=True)
+	print("Training sequence len :", len(train_seq_loader.dataset), "sequences.", "Validation sequence len :", len(val_seq_loader.dataset), "sequences.")
+	for mu, logvar, act in train_seq_loader:
+		print("Mu frames batch shape:", mu.shape)
+		print("Logvar frames batch shape:", logvar.shape)
+		print("Action frames batch shape:", act.shape)
+		break
+
+	val_ref = feature_set.get_visual_reference()
+	print("Validation visual reference created with", len(val_ref), "batches.")
+	for vis in val_ref:
+		print("Validation visual reference batch len:", len(vis), "sequences.")
+		print("First sequence visual reference shape:", vis[0].shape)
 		break
 	
 if __name__ == "__main__":
