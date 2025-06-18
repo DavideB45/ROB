@@ -20,7 +20,7 @@ if __name__ == "__main__":
     vae_model.eval()  # Set the model to evaluation mode
 
     # Create the dataset
-    dataset = Dataset("dataset", "no_obj", vae_model, seq_len=44)
+    dataset = Dataset("dataset", "no_obj", vae_model, seq_len=200)
 
     # Get training and validation sets
     train_set = dataset.get_validation_set()
@@ -29,6 +29,7 @@ if __name__ == "__main__":
     train_set_ref_loader = torch.utils.data.DataLoader(train_set_ref, batch_size=1, shuffle=False)
     i = len(train_set) // 2  # Get a sample from the middle of the dataset
     i = random.randint(0, len(train_set) - 1)  # Randomly select a sample index
+    i = 2
     print(f"Using sample index: {i} of {len(train_set)}")
     sample_mu, sample_logvar, sample_act = list(train_loader)[i]
     sample_img = list(train_set_ref_loader)[i]
