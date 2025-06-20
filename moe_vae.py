@@ -39,6 +39,46 @@ class MoE_VAE(nn.Module):
 		vision_output, proprioception_output = self.decode(z)
 		return vision_output, proprioception_output, mu, logvar
 	
+	def position_to_vision(self, proprioception_input):
+		"""
+		Convert proprioception input to vision output.
+		This method assumes that the proprioception model can generate a latent representation
+		that can be decoded into a vision-like output.
+		"""
+		mu, logvar = self.proprioception.encode(proprioception_input)
+		z = self.reparameterize(mu, logvar)
+		return self.vision.decode(z)
+	
+	def pos_to_vis_loss(self, pos_input, vision_output, beta=1.0):
+		"""
+		Calculate the loss for converting position to vision.
+		This method assumes that the proprioception model can generate a latent representation
+		that can be decoded into a vision-like output.
+		"""
+		pos_output = self.position_to_vision(pos_input)
+		reconstruction_loss = nn.functional.mse_loss(vision_output, pos_output, reduction='sum') / pos_input.size(0)
+		kld_loss = self.kl_divergence_loss(*self.proprioception.encode(pos_input)) * beta
+		return reconstruction_loss + kld_loss
+	
+	def visual_loss(self, vision_input, vision_output):
+		"""
+		Calculate the loss for the vision output.
+		TODO: This should be customized based on the specific loss function used for vision data.
+		"""
+		return nn.functional.mse_loss(vision_output, vision_input, reduction='sum') / vision_input.size(0)
+	
+	def proprioception_loss(self, proprioception_input, proprioception_output):
+		"""
+		Calculate the loss for the proprioception output.
+		"""
+		return nn.functional.mse_loss(proprioception_output, proprioception_input, reduction='sum') / proprioception_input.size(0)
+	
+	def kl_divergence_loss(self, mu, logvar):
+		"""
+		Calculate the KL divergence loss.
+		"""
+		return -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+	
 	def loss_function(self, vision_input, proprioception_input, beta=1.0):
 		vision_output, proprioception_output, mu, logvar = self.forward(vision_input, proprioception_input)
 		# TODO: Adjust loss for vision
@@ -47,7 +87,7 @@ class MoE_VAE(nn.Module):
 		kld_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp()) * beta
 
 		return reconstruction_loss_vision + reconstruction_loss_proprioception + kld_loss
-	
+
 	def train_epoch(self, dataloader, sense_order:list[str], optimizer, beta=1.0, device='cpu'):
 		self.train()
 		total_loss = 0.0

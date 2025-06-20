@@ -56,7 +56,7 @@ def image_list_to_gif(image_list, filename, duration=100):
     image_list[0].save(filename, save_all=True, append_images=image_list[1:], duration=duration, loop=0)
     print(f"GIF saved as {filename}")
 
-def show_image(image_tensor):
+def show_image(image_tensor, title=None):
     """
     Display a single image tensor.
     Args:
@@ -68,6 +68,8 @@ def show_image(image_tensor):
         image_tensor = image_tensor.transpose(1, 2, 0)  # Convert to (H, W, C)
     plt.imshow(image_tensor)
     plt.axis('off')  # Hide axes
+    if title:
+        plt.title(title)
     plt.show()
 
 def save_image(image_tensor, filename):
