@@ -8,7 +8,7 @@ from helpers.utils_proj import device, show_image
 
 def main():
     model = VAE(latent_dim=200)
-    model.load_state_dict(torch.load("models/vae_model_foundation_kl04_l2e4_ed200.pth", map_location=device))
+    model.load_state_dict(torch.load("models/vae_model.pth", map_location=device))
     model.eval().to(device)
 
     dataset = Dataset("dataset", "no_obj")
@@ -18,7 +18,7 @@ def main():
 
     with torch.no_grad():        
         v_pred, mu, lv = model.forward(vision)
-        for i in range(0):
+        for i in range(4):
             show_image(v_pred[i].cpu().numpy(), title="Predicted Vision")
             show_image(vision[i].cpu().numpy(), title="Actual Vision")
 

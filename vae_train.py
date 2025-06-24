@@ -14,8 +14,8 @@ dataset:Dataset = Dataset(
     condition="no_obj"
 )
 device = get_best_device()
-LATENT_DIM = 90
-MODEL_NAME = "vae_model.pth"
+LATENT_DIM = 200
+MODEL_NAME = "models/vae_model.pth"
 
 
 def train_model(resume:str = None):
@@ -27,16 +27,16 @@ def train_model(resume:str = None):
     else:
         print("Starting training from scratch.")
     print(f"Model # of params: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
-    perceptual_loss_fn = VGGPerceptualLoss(layer_ids=(3, 8)).to(device)  # Initialize perceptual loss function
+    #perceptual_loss_fn = VGGPerceptualLoss(layer_ids=(3, 8)).to(device)  # Initialize perceptual loss function
     perceptual_loss_fn = None
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=3e-4)
     train_loader = torch.utils.data.DataLoader(dataset.get_training_set()[0], batch_size=16, shuffle=True)
     test_loader = torch.utils.data.DataLoader(dataset.get_validation_set()[0], batch_size=64, shuffle=False)
-    num_epochs = 20
+    num_epochs = 60
     train_losses = []
     test_losses = []
     for epoch in tqdm(range(num_epochs), desc="Epochs"):
-        kl_weight = min(1.0, epoch / (num_epochs * 0.7))  # gradually increase KL weight
+        # kl_weight = min(1.0, epoch / (num_epochs * 0.7))  # gradually increase KL weight
         train_loss = train_epoch(model, train_loader, 
                                  optimizer, device, 
                                  kl_weight=0.4,
@@ -50,7 +50,7 @@ def train_model(resume:str = None):
         train_losses.append(train_loss)
         test_losses.append(test_loss)
         # early stopping condition
-        if epoch > 5 and test_loss > max(test_losses[-6:]):
+        if epoch > 5 and test_loss > max(test_losses[-7:-1]):
             print("Early stopping triggered.")
             break
         # save the best model
@@ -131,7 +131,8 @@ def test_kld(name: str = "vae_model.pth",
     print(f"Average KLD over {num_samples} samples: {avg_kld:.4f}")
 
 if __name__ == "__main__":
-    train_model("models/vae_model_foundation_kl04_l3e4_ed90.pth")
+    "models/vae_model_foundation_kl04_l3e4_ed90.pth"
+    train_model(resume=None)
     #show_datasets()
     test_model(MODEL_NAME)
     test_kld(MODEL_NAME, num_samples=100, latent_dim=LATENT_DIM)

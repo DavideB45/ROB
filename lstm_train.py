@@ -6,10 +6,11 @@ from helpers.utils_proj import device
 import random
 import matplotlib.pyplot as plt
 
-LATENT_DIM = 90
-VAE_NAME = "vae_model_foundation_kl04_l3e4_ed90.pth"
+LATENT_DIM = 200
+VAE_NAME = "models/vae_model.pth"
 "vae_model_foundation_kl04_l2e4_ed200.pth"
 "vae_model.pth"
+"vae_model_foundation_kl04_l3e4_ed90.pth"
 "models/vae_final_model.pth"
 def main():
 
