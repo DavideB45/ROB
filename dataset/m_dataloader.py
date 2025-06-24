@@ -12,7 +12,7 @@ from moe_vae import MoE_VAE, create_mmvae_model
 class MDataset(torch.utils.data.Dataset):
 	def __init__(self, path, condition):
 		# Get simulation data
-		position,FORCE,vision,cond_input = self.get_data(path, 0, condition)
+		position,FORCE,vision,cond_input = self.get_data(path, 1, condition)
 		
 		self.position = position
 		self.vision = vision

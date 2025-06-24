@@ -33,7 +33,7 @@ class Dataset(torch.utils.data.Dataset):
     def get_data(self, path, condition):                
         for trial in range(1):
             # Load data
-            data = self.load_data(path,trial,condition)
+            data = self.load_data(path,trial + 1,condition)
             # Manipulate data  
             pos,force,vision,opt_flow,act = self.shift_data(data)
             # Merge trials (if more than 1)

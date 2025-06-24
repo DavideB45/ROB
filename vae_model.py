@@ -5,6 +5,7 @@ from torch import nn, optim
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from helpers.resBlock import ResidualBlock
+from tqdm import tqdm
 
 
 
@@ -154,7 +155,7 @@ def train_epoch(model: VAE,
                 ) -> float:
     model.train()
     epoch_loss = 0.0
-    for x in loader:
+    for x in tqdm(loader, desc="Training", leave=False):
         x = x.to(device)
         optimizer.zero_grad()
         recon, mu, logvar = model(x)
@@ -166,6 +167,8 @@ def train_epoch(model: VAE,
         loss.backward()
         optimizer.step()
         epoch_loss += loss.item() * x.size(0)
+        del x
+        torch.cuda.empty_cache()
     return epoch_loss / len(loader.dataset)
 
 
@@ -178,4 +181,6 @@ def test_epoch(model: VAE, loader: DataLoader, device: torch.device) -> float:
             recon, mu, logvar = model(x)
             loss = vae_loss(recon, x, mu, logvar)
             test_loss += loss.item() * x.size(0)
+            del x
+            torch.cuda.empty_cache()
     return test_loss / len(loader.dataset)

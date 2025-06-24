@@ -44,7 +44,7 @@ class Dataset(torch.utils.data.Dataset):
             tuple: A tuple containing the preprocessed data (POS, FORCE, VISION, ACT).
         """                
         # Load data
-        _, pos, force, act, vision = self.load_data(path,0,condition)
+        _, pos, force, act, vision = self.load_data(path,1,condition)
         # Data pre-processing
         data = (pos,force,vision,act)
         return self.preprocess_data(data)
@@ -104,7 +104,16 @@ class Dataset(torch.utils.data.Dataset):
         vision = torch.tensor(vision, dtype=torch.float32)  # Convert to tensor
         vision = vision.permute(0, 3, 1, 2).contiguous().to(device)  # Change to (batch_size, channels, height, width)
         with torch.no_grad():
-            world_embedding = vision_vae.encode(vision)
+            # Encode in batches of 32 for memory efficiency
+            batch_size = 32
+            mus = []
+            logvars = []
+            for i in range(0, vision.shape[0], batch_size):
+                batch = vision[i:i+batch_size]
+                mu, logvar = vision_vae.encode(batch)
+                mus.append(mu)
+                logvars.append(logvar)
+            world_embedding = (torch.cat(mus, dim=0), torch.cat(logvars, dim=0))
         #memory efficient encoding
         # divide the dataset into section of duration 10 frames
         self.data = []
@@ -124,7 +133,7 @@ class Dataset(torch.utils.data.Dataset):
     def split_data(self, vision:np.ndarray) -> None:
         """Split the dataset into training and validation sets."""
         #self.tr, self.vs = train_test_split(self.data, test_size=0.1, random_state=42)
-        split_idx = int(len(self.data) * 0.9)
+        split_idx = int(len(self.data) * 0.71)
         self.tr = self.data[:split_idx]
         self.vs = self.data[split_idx:]
         vision_blocked = []
