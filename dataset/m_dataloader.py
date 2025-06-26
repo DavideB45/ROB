@@ -12,7 +12,7 @@ from moe_vae import MoE_VAE, create_mmvae_model
 class MDataset(torch.utils.data.Dataset):
 	def __init__(self, path, condition):
 		# Get simulation data
-		position,FORCE,vision,cond_input = self.get_data(path, 1, condition)
+		position,FORCE,vision,cond_input = self.get_data(path, 0, condition)
 		
 		self.position = position
 		self.vision = vision
@@ -22,7 +22,7 @@ class MDataset(torch.utils.data.Dataset):
 	def get_data(self, path, trials, condition):                
 		for trial in range(trials+1):
 			# Load data
-			_,pos,force,act,vision = self.load_data(path,trial,condition)
+			_,pos,force,act,vision = self.load_data(path,trial +1,condition)
 			# Merge trials (if more than 1)
 			if trial == 0:
 				POS = pos
@@ -102,7 +102,19 @@ class MDataset(torch.utils.data.Dataset):
 		#encode values
 		with torch.no_grad():
 			mmvae.eval()
-			mu, logvar = mmvae.encode(self.vision.to(device), self.position.to(device))
+			mu_list, logvar_list = [], []
+			batch_size = 16
+			num_samples = self.vision.shape[0]
+			for i in range(0, num_samples, batch_size):
+				vision_batch = self.vision[i:i+batch_size].to(device)
+				pos_batch = self.position[i:i+batch_size].to(device)
+				mu_batch, logvar_batch = mmvae.encode(vision_batch, pos_batch)
+				mu_list.append(mu_batch.cpu())
+				logvar_list.append(logvar_batch.cpu())
+				del vision_batch, pos_batch, mu_batch, logvar_batch
+				torch.mps.empty_cache()
+			mu = torch.cat(mu_list, dim=0)
+			logvar = torch.cat(logvar_list, dim=0)
 		# Rescale mu and logvar
 		self.sc_MU = StandardScaler()
 		mu = self.sc_MU.fit_transform(mu.detach().cpu().numpy())
@@ -130,9 +142,11 @@ class MDataset(torch.utils.data.Dataset):
 			raise ValueError("Hidden sequence not prepared. Call prepare_hidden_sequence first.")
 		
 		split_idx = int(len(self.sequence) * (1 - test_perc))
+		split_idx2 = int(len(self.visual_ref) * (1 - test_perc/3))
 		train_data = self.sequence[:split_idx]
-		val_data = self.sequence[split_idx:]
-		visual_ref_val = self.visual_ref[split_idx:]
+		val_data = self.sequence[split_idx:split_idx2]
+		test_data = self.sequence[split_idx2:]
+		visual_ref_val = self.visual_ref[split_idx:split_idx2]
 		train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=shuffle)
 		val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, shuffle=False)
 

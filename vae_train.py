@@ -14,7 +14,7 @@ dataset:Dataset = Dataset(
     condition="no_obj"
 )
 device = get_best_device()
-LATENT_DIM = 200
+LATENT_DIM = 30
 MODEL_NAME = "models/vae_model.pth"
 
 
@@ -29,7 +29,7 @@ def train_model(resume:str = None):
     print(f"Model # of params: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
     #perceptual_loss_fn = VGGPerceptualLoss(layer_ids=(3, 8)).to(device)  # Initialize perceptual loss function
     perceptual_loss_fn = None
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=3e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=5e-4)
     train_loader = torch.utils.data.DataLoader(dataset.get_training_set()[0], batch_size=16, shuffle=True)
     test_loader = torch.utils.data.DataLoader(dataset.get_validation_set()[0], batch_size=64, shuffle=False)
     num_epochs = 60
@@ -39,10 +39,10 @@ def train_model(resume:str = None):
         # kl_weight = min(1.0, epoch / (num_epochs * 0.7))  # gradually increase KL weight
         train_loss = train_epoch(model, train_loader, 
                                  optimizer, device, 
-                                 kl_weight=0.4,
+                                 kl_weight=1,
                                  perceptual_loss_fn=perceptual_loss_fn,
                                  perc_weight=0.1,
-                                 purple_weight=2.0
+                                 purple_weight=3.0
                                  )
         test_loss = test_epoch(model, test_loader, 
                                device)
@@ -50,12 +50,12 @@ def train_model(resume:str = None):
         train_losses.append(train_loss)
         test_losses.append(test_loss)
         # early stopping condition
-        if epoch > 5 and test_loss > max(test_losses[-7:-1]):
+        if epoch > 13 and test_loss > max(test_losses[-10:-1]):
             print("Early stopping triggered.")
             break
         # save the best model
         if epoch == 0 or test_loss < min(test_losses[:-1]):
-            torch.save(model.state_dict(), "vae_model.pth")
+            torch.save(model.state_dict(), MODEL_NAME)
     # Plot training and test losses
     plt.figure(figsize=(10, 5))
     plt.title("Training and Test Losses")

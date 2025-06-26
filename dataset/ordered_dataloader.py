@@ -133,15 +133,18 @@ class Dataset(torch.utils.data.Dataset):
     def split_data(self, vision:np.ndarray) -> None:
         """Split the dataset into training and validation sets."""
         #self.tr, self.vs = train_test_split(self.data, test_size=0.1, random_state=42)
-        split_idx = int(len(self.data) * 0.71)
+        split_idx = int(len(self.data) * 0.7)
+        split_idx2 = int(len(self.data) * 0.9)
         self.tr = self.data[:split_idx]
-        self.vs = self.data[split_idx:]
+        self.vs = self.data[split_idx:split_idx2]
+        self.ts = self.data[split_idx2:]
         vision_blocked = []
         for i in range(0, len(vision) - self.seq_len, self.seq_len):
             vision_blocked.append(vision[i:i + self.seq_len])
         vision_blocked = np.array(vision_blocked)
         self.tr_ref = vision_blocked[:split_idx]
-        self.vs_ref = vision_blocked[split_idx:]
+        self.vs_ref = vision_blocked[split_idx:split_idx2]
+        self.ts_ref = vision_blocked[split_idx2:]
  
     def rescale(self, data:torch.Tensor, type:str) -> np.ndarray:
         """Rescale the data based on its type.
@@ -168,15 +171,18 @@ class Dataset(torch.utils.data.Dataset):
     
     def get_training_set(self):
         return self.tr
-    
     def get_training_set_ref(self):
         return self.tr_ref
     
     def get_validation_set(self):
         return self.vs
-    
     def get_validation_set_ref(self):
         return self.vs_ref
+    
+    def get_test_set(self):
+        return self.ts
+    def get_test_set_ref(self):
+        return self.ts_ref
     
     def __len__(self):
         return len(self.data)

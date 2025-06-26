@@ -7,8 +7,8 @@ from torch.nn.functional import mse_loss, kl_div
 from helpers.utils_proj import device, show_image
 
 def main():
-    model = VAE(latent_dim=200)
-    model.load_state_dict(torch.load("models/vae_model.pth", map_location=device))
+    model = VAE(latent_dim=30)
+    model.load_state_dict(torch.load("models/vae_model_30_kl1_.pth", map_location=device))
     model.eval().to(device)
 
     dataset = Dataset("dataset", "no_obj")

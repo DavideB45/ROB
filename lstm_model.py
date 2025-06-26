@@ -1,4 +1,4 @@
-from torch.nn import LSTM, Linear, BatchNorm1d, ReLU
+from torch.nn import LSTM, Linear, BatchNorm1d, ReLU, LayerNorm
 from torch.nn.functional import relu, mse_loss
 import torch.nn as nn
 import torch
@@ -46,7 +46,7 @@ class MuLogvarLSTM(nn.Module):
         out = self.batch_norm_prep(out.transpose(1, 2)).transpose(1, 2)  # Apply batch normalization
         out = relu(self.prep_fc2(out))  # Prepare the input
         skip = self.batch_norm_prep2(out.transpose(1, 2)).transpose(1, 2)  # Apply batch normalization
-        out, (h_t, h_t) = self.lstm(skip) if h_t is None else self.lstm(skip, (h_t, h_t))
+        out, (h_t, h_c) = self.lstm(skip) if h_t is None else self.lstm(skip, (h_t, h_c))
         out = self.batch_norm_1(out.transpose(1, 2)).transpose(1, 2)  # Apply batch normalization
         out = torch.cat((out, skip), dim=-1)  # Concatenate the skip connection
         out = relu(self.fc_1(out))
@@ -55,7 +55,7 @@ class MuLogvarLSTM(nn.Module):
         out = self.batch_norm_3(out.transpose(1, 2)).transpose(1, 2)
         mu = self.fc_mu(out) #+ x[:, :, :self.embedding_dim]
         logvar = self.fc_logvar(out) #+ x[:, :, self.embedding_dim:2*self.embedding_dim]
-        return mu, logvar, (h_t, h_t)
+        return mu, logvar, (h_t, h_c)
         
 
     
@@ -95,7 +95,8 @@ class MuLogvarLSTM(nn.Module):
                 lstm_input = torch.cat([mu_input, logvar_input, act_t, act_t1], dim=-1).unsqueeze(1)
                 mu_pred, logvar_pred, (h_t, c_t) = self.forward(lstm_input, h_t, c_t)
                 outputs_mu.append(mu_pred.squeeze(1))
-                outputs_logvar.append(logvar_pred.squeeze(1))
+                #outputs_logvar.append(logvar_pred.squeeze(1))
+                outputs_logvar.append(torch.zeros_like(mu_pred.squeeze(1)))
 
             return outputs_mu, outputs_logvar
 
@@ -254,6 +255,9 @@ class MuLogvarLSTM(nn.Module):
         self.train()
         tot_loss = 0.0
         for mu, logvar, act in tr_loader:
+            if len(mu) < 2:
+                skipped_last = True
+                continue
             optimizer.zero_grad()
             loss = self.forward_wrapper(mu, logvar, act, teacher_forcing=teacher_forcing, device=device, full_error=full_error)
             loss.backward()

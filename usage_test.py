@@ -11,21 +11,18 @@ if __name__ == "__main__":
     device = get_best_device()
 
     # Initialize the VAE model
-    latent_dim = 200
+    latent_dim = 30
     vae_model = VAE(latent_dim=latent_dim).to(device)
-    "models/vae_final_model.pth"
-    "vae_model_foundation_kl04_l2e4_ed200.pth"
-    "vae_model_foundation_kl04_l3e4_ed90.pth"
-    vae_model.load_state_dict(torch.load("models/vae_model.pth", map_location=device))
+    vae_model.load_state_dict(torch.load("models/vae_model_30_kl1_.pth", map_location=device))
     vae_model.eval()  # Set the model to evaluation mode
 
     # Create the dataset
     dataset = Dataset("dataset", "no_obj", vae_model, seq_len=40)
 
     # Get training and validation sets
-    train_set = dataset.get_validation_set()
+    train_set = dataset.get_test_set()
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=False)
-    train_set_ref = dataset.get_validation_set_ref()
+    train_set_ref = dataset.get_test_set_ref()
     train_set_ref_loader = torch.utils.data.DataLoader(train_set_ref, batch_size=1, shuffle=False)
     i = len(train_set) // 2  # Get a sample from the middle of the dataset
     i = random.randint(0, len(train_set) - 1)  # Randomly select a sample index
@@ -36,7 +33,7 @@ if __name__ == "__main__":
 
     # Initialize the LSTM model
     lstm_model = MuLogvarLSTM(embedding_dim=latent_dim, hidden_dim=512, num_layers=2, dropout=0.1).to(device)
-    lstm_model.load_state_dict(torch.load("models/lstm_final_model.pth", map_location=device))
+    lstm_model.load_state_dict(torch.load("models/lstm_model_30_arl.pth", map_location=device))
     print(f"Model # of parameters: {sum(p.numel() for p in lstm_model.parameters() if p.requires_grad)}")
     lstm_model.eval()  # Set the model to evaluation mode
 

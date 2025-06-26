@@ -4,8 +4,8 @@ from helpers.utils_proj import get_best_device, show_image, plot_loss
 import torch
 import tqdm
 
-LATENT_DIM = 200  # Dimension of the latent space
-BETA = 0.1  # Weight for the KL divergence term in the loss function
+LATENT_DIM = 30  # Dimension of the latent space
+BETA = 1  # Weight for the KL divergence term in the loss function
 LEARNING_RATE = 0.001  # Learning rate for the optimizer
 BATCH_SIZE = 64  # Batch size for training
 device = get_best_device()
@@ -19,8 +19,8 @@ def get_dataset() -> tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoa
 	scenario = "no_obj"
 	dataset = MDataset(path, scenario)
 	train_loader, val_loader = dataset.get_VAE_loaders(["VISION", "POS"],
-													   test_perc=0.1,
-													   batch_size=32,
+													   test_perc=0.3,
+													   batch_size=BATCH_SIZE,
 													   shuffle=True)
 	return train_loader, val_loader
 
@@ -42,7 +42,7 @@ def main():
 
 	optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
-	num_epochs = 100
+	num_epochs = 60
 	losses = {'train_loss': [], 'val_loss': []}
 	train_loss = 0.0
 	val_loss = 0.0

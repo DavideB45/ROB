@@ -11,7 +11,7 @@ LEARNING_RATE = 0.001
 LATENT_DIM = 200
 
 dataset = MDataset("./dataset", "no_obj")
-model = load_mmvae_model("./models/moe_vae_model.pth", 20, LATENT_DIM)
+model = load_mmvae_model("./models/moe_vae_model_200.pth", 20, LATENT_DIM)
 model.to(device)
 dataset.prepare_hidden_sequence(model, seq_len=10, device=device)
 lstm_model = MuLogvarLSTM(
@@ -29,10 +29,11 @@ losses = {
 
 
 random_numbers = [4, 10, 8, 16, 5, 20, 7, 12, 14, 6]
+#random_numbers = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 for i in random_numbers:
     print(f"Training LSTM model without teacher forcing an len {i}...")
     dataset.prepare_hidden_sequence(model, seq_len=i, device=device)
-    tr_loader, vl_loader = dataset.get_sequence_loaders(test_perc=0.1, batch_size=BATCH_SIZE, shuffle=True)
+    tr_loader, vl_loader = dataset.get_sequence_loaders(test_perc=0.3, batch_size=BATCH_SIZE, shuffle=True)
     epoch_tr_loss = 0.0
     epoch_vs_loss = 0.0
     for epoch in trange(EPOCHS, desc=f"SeqLen {i}", unit="epoch", colour="green"):
@@ -44,15 +45,15 @@ for i in random_numbers:
         # early stopping criteria
         if epoch > 10 and epoch_vs_loss > max(losses["validation"][-6:-1]):
             print("\nEarly stopping triggered.\n")
+            lstm_model.load_state_dict(torch.load(f"./models/lstm_model_mm_{LATENT_DIM}.pth", map_location=device))
             break
         # Save model if validation loss improves
         if epoch == 0 or epoch_vs_loss < min(losses["validation"][:-1]):
             torch.save(lstm_model.state_dict(), f"./models/lstm_model_mm_{LATENT_DIM}.pth")
-            print(f"\nModel saved for sequence length {i}.")
+            print(f"Model saved for sequence length {i}.")
 
 # Plot the losses
 plot_loss(losses, "LSTM Training Losses", "Epochs", "Loss",
-          save_path="./models/lstm_training_losses_mm.png",
-          legend=True, title="LSTM Training Losses")
+          save_path="./models/lstm_training_losses_mm.png")
 
 

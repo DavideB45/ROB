@@ -9,14 +9,14 @@ BATCH_SIZE = 128
 LATENT_DIM = 200
 
 dataset = MDataset("./dataset", "no_obj")
-model = load_mmvae_model("./models/moe_vae_model.pth", 20, LATENT_DIM).to(device)
+model = load_mmvae_model(f"./models/moe_vae_model_{LATENT_DIM}.pth", 20, LATENT_DIM).to(device)
 model.eval()
-dataset.prepare_hidden_sequence(model, seq_len=200, device=device)
-_, vl = dataset.get_sequence_loaders(test_perc=0.1, batch_size=1, shuffle=False)
+dataset.prepare_hidden_sequence(model, seq_len=40, device=device)
+_, vl = dataset.get_sequence_loaders(test_perc=0.3, batch_size=1, shuffle=False)
 vl_ref = dataset.get_visual_reference()
 
 lstm_model = MuLogvarLSTM(embedding_dim=LATENT_DIM, hidden_dim=512, num_layers=2, dropout=0.1)
-lstm_model.load_state_dict(torch.load("./models/lstm_model_mm_200.pth", map_location=device))
+lstm_model.load_state_dict(torch.load(f"./models/lstm_model_mm_{LATENT_DIM}.pth", map_location=device))
 lstm_model.eval()
 
 i = random.randint(0, len(vl) - 1)  # Randomly select a sample index
@@ -65,8 +65,8 @@ for i in range(sample_img[0].shape[0]):
 
 
 # Save the image sequence as a GIF
-image_list_to_gif(img_sequence_sensed[:], "output_sequence_sensed_mm.gif", duration=100)
+image_list_to_gif(img_sequence_sensed[:], "output_sequence_sensed_mm.gif", duration=200)
 # Save the image sequence as a GIF
-image_list_to_gif(img_sequence_sim[:], "output_sequence_sim_mm.gif", duration=100)
+image_list_to_gif(img_sequence_sim[:], "output_sequence_sim_mm.gif", duration=200)
 # Save the image sequence as a GIF
-image_list_to_gif(img_seqence_ref[:], "output_sequence_ref_mm.gif", duration=100)
+image_list_to_gif(img_seqence_ref[:], "output_sequence_ref_mm.gif", duration=200)
