@@ -4,7 +4,7 @@ from helpers.utils_proj import get_best_device, show_image, plot_loss
 import torch
 import tqdm
 
-LATENT_DIM = 30  # Dimension of the latent space
+LATENT_DIM = 200  # Dimension of the latent space
 BETA = 1  # Weight for the KL divergence term in the loss function
 LEARNING_RATE = 0.001  # Learning rate for the optimizer
 BATCH_SIZE = 64  # Batch size for training
@@ -53,7 +53,7 @@ def main():
 		losses['train_loss'].append(train_loss)
 		losses['val_loss'].append(val_loss)
 		# define early stopping criteria
-		if epoch > 10 and val_loss > max(losses['val_loss'][-10:-1]):
+		if epoch > 24 and val_loss > max(losses['val_loss'][-20:-1]):
 			print("Early stopping triggered.")
 			break
 		# save model if validation loss improves
