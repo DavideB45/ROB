@@ -20,9 +20,9 @@ if __name__ == "__main__":
     dataset = Dataset("dataset", "no_obj", vae_model, seq_len=40)
 
     # Get training and validation sets
-    train_set = dataset.get_test_set()
+    train_set = dataset.get_validation_set()
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=False)
-    train_set_ref = dataset.get_test_set_ref()
+    train_set_ref = dataset.get_validation_set_ref()
     train_set_ref_loader = torch.utils.data.DataLoader(train_set_ref, batch_size=1, shuffle=False)
     i = len(train_set) // 2  # Get a sample from the middle of the dataset
     i = random.randint(0, len(train_set) - 1)  # Randomly select a sample index

@@ -79,11 +79,46 @@ class MoE_VAE(nn.Module):
 		"""
 		return -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
 	
+	def create_purple_weight_map_rgb(x: torch.Tensor,
+								 purple_weight: float = 2.0) -> torch.Tensor:
+		"""
+		Creates a weight map that emphasizes purple pixels, working directly in RGB.
+
+		Args:
+			x (torch.Tensor): Input batch of images in (B, 3, H, W) format.
+							Assumes RGB order and values normalized to [0, 1].
+			purple_weight (float): The weight to apply to pixels identified as purple.
+			dominance_margin (float): How much larger R and B must be than G to be
+									considered purple. Helps avoid grayish colors.
+
+		Returns:
+			torch.Tensor: A weight map of shape (B, 1, H, W).
+		"""
+		if x.dim() != 4 or x.shape[1] != 3:
+			raise ValueError(f"Input tensor must be in (B, 3, H, W) format, but got {x.shape}")
+		red_channel = x[:, 0, :, :]
+		green_channel = x[:, 1, :, :]
+		blue_channel = x[:, 2, :, :]
+		is_purple_mask = (red_channel > 70/255) & \
+						(green_channel > 60/255) & \
+						(blue_channel > 100/255) & \
+						(red_channel < 127/255) & \
+						(green_channel < 100/255) & \
+						(blue_channel < 160/255)
+
+		weights = torch.ones_like(is_purple_mask, dtype=torch.float32, device=x.device)
+		weights[is_purple_mask] = purple_weight
+		return weights.unsqueeze(1)
+
 	def loss_function(self, vision_input, proprioception_input, beta=1.0):
 		vision_output, proprioception_output, mu, logvar = self.forward(vision_input, proprioception_input)
-		# TODO: Adjust loss for vision
 		reconstruction_loss_vision = nn.functional.mse_loss(vision_output, vision_input, reduction='sum') / vision_input.size(0)
+		#weight_in_map = self.create_purple_weight_map_rgb(vision_input, 3)
+		#weight_out_map = self.create_purple_weight_map_rgb(vision_output, 3)
+		#reconstruction_loss_vision = (reconstruction_loss_vision * (weight_in_map + weight_out_map) / 2).sum() / vision_input.size(0)
+		
 		reconstruction_loss_proprioception = nn.functional.mse_loss(proprioception_output, proprioception_input, reduction='sum') / proprioception_input.size(0)
+		
 		kld_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp()) * beta
 
 		return reconstruction_loss_vision + reconstruction_loss_proprioception + kld_loss

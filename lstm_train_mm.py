@@ -8,10 +8,10 @@ from tqdm import trange
 EPOCHS = 100
 BATCH_SIZE = 128
 LEARNING_RATE = 0.001
-LATENT_DIM = 200
+LATENT_DIM = 30
 
 dataset = MDataset("./dataset", "no_obj")
-model = load_mmvae_model("./models/moe_vae_model_200.pth", 20, LATENT_DIM)
+model = load_mmvae_model(f"./models/moe_vae_model_{LATENT_DIM}.pth", 20, LATENT_DIM)
 model.to(device)
 dataset.prepare_hidden_sequence(model, seq_len=10, device=device)
 lstm_model = MuLogvarLSTM(

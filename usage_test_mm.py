@@ -6,7 +6,7 @@ from helpers.utils_proj import device, image_list_to_gif
 import random
 
 BATCH_SIZE = 128
-LATENT_DIM = 200
+LATENT_DIM = 30
 
 dataset = MDataset("./dataset", "no_obj")
 model = load_mmvae_model(f"./models/moe_vae_model_{LATENT_DIM}.pth", 20, LATENT_DIM).to(device)

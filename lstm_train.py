@@ -7,11 +7,8 @@ import random
 import matplotlib.pyplot as plt
 
 LATENT_DIM = 200
-VAE_NAME = "models/vae_model.pth"
-"vae_model_foundation_kl04_l2e4_ed200.pth"
-"vae_model.pth"
-"vae_model_foundation_kl04_l3e4_ed90.pth"
-"models/vae_final_model.pth"
+VAE_NAME = f"models/vae_model_{LATENT_DIM}_kl1_.pth"
+
 def main():
 
 	model = VAE(latent_dim=LATENT_DIM).to(device)
@@ -25,23 +22,28 @@ def main():
 	}
 	lstm_model.train()
 	
+	#random_numbers = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 	random_numbers = [4, 10, 8, 16, 5, 20, 7, 12, 14, 6]
+	#random_numbers = [6]
 	for i in random_numbers:
 		print(f"Training LSTM model without teacher forcing an len {i}...")
 		ds = Dataset("dataset", "no_obj", model, seq_len=i)
 		tr, vs = ds.get_training_set(), ds.get_validation_set()
 		tr_loader = torch.utils.data.DataLoader(tr, batch_size=128, shuffle=True)
 		vs_loader = torch.utils.data.DataLoader(vs, batch_size=32, shuffle=False)
-		optimizer = torch.optim.Adam(lstm_model.parameters(), lr=0.0001, weight_decay=0.0001)
+		optimizer = torch.optim.Adam(lstm_model.parameters(), lr=0.001, weight_decay=0.0001)
 		for epoch in range(320):
-			epoch_tr_loss = lstm_model.train_epoch(tr_loader, optimizer, device, teacher_forcing=False)
-			epoch_vs_loss = lstm_model.test_epoch(vs_loader, device, teacher_forcing=False)
+			epoch_tr_loss = lstm_model.train_epoch(tr_loader, optimizer, device, teacher_forcing=False, full_error=False)
+			epoch_vs_loss = lstm_model.test_epoch(vs_loader, device, teacher_forcing=False, full_error=False)
 			print(f"Epoch {(epoch+1):3d}: Train Loss: {epoch_tr_loss:.4f}, Validation Loss: {epoch_vs_loss:.4f}", end="\r")
 			losses["train"].append(epoch_tr_loss)
 			losses["validation"].append(epoch_vs_loss)
 			if epoch > 10 and epoch_vs_loss > max(losses["validation"][-6:-1]):
 				print("\nEarly stopping triggered.\n")
+				lstm_model.load_state_dict(torch.load(f"models/lstm_model_{LATENT_DIM}.pth", map_location=device))
 				break
+			if epoch == 0 or epoch_vs_loss < min(losses["validation"][:-1]):
+				torch.save(lstm_model.state_dict(), f"models/lstm_model_{LATENT_DIM}.pth")
 
 	for i in []:
 		print(f"Training LSTM model without teacher forcing an len {i}...")
@@ -51,8 +53,8 @@ def main():
 		vs_loader = torch.utils.data.DataLoader(vs, batch_size=32, shuffle=False)
 		optimizer = torch.optim.Adam(lstm_model.parameters(), lr=0.00001, weight_decay=0.0001)
 		for epoch in range(120):
-			epoch_tr_loss = lstm_model.train_epoch(tr_loader, optimizer, device, teacher_forcing=False, full_error=True)
-			epoch_vs_loss = lstm_model.test_epoch(vs_loader, device, teacher_forcing=False, full_error=True)
+			epoch_tr_loss = lstm_model.train_epoch(tr_loader, optimizer, device, teacher_forcing=False, full_error=False)
+			epoch_vs_loss = lstm_model.test_epoch(vs_loader, device, teacher_forcing=False, full_error=False)
 			print(f"Epoch {epoch+1}: Train Loss: {epoch_tr_loss:.4f}, Validation Loss: {epoch_vs_loss:.4f}")
 			losses["train"].append(epoch_tr_loss)
 			losses["validation"].append(epoch_vs_loss)
@@ -82,7 +84,7 @@ def main():
 	plt.show()
 
 	# Save the trained model
-	torch.save(lstm_model.state_dict(), "models/lstm_final_model.pth")
+	#torch.save(lstm_model.state_dict(), "models/lstm_final_model.pth")
 
 if __name__ == "__main__":
 	main()
