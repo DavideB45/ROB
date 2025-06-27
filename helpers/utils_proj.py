@@ -39,6 +39,12 @@ def image_list_to_gif(image_list, filename, duration=100):
     """
     if not image_list:
         raise ValueError("The image list is empty.")
+    # handle shape 64 64 3 by rechaping
+    if isinstance(image_list[0], torch.Tensor):
+        if image_list[0].shape == (64, 64, 3):
+            print("Reshaping image tensors to (C, H, W) format.")
+            for i in range(len(image_list)):
+                image_list[i] = image_list[i].permute(2, 0, 1)
     
     # Convert tensors to PIL images
     pil_images = []

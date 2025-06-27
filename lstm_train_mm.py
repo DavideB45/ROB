@@ -5,7 +5,7 @@ from lstm_model import MuLogvarLSTM
 from helpers.utils_proj import device, plot_loss
 from tqdm import trange
 
-EPOCHS = 100
+EPOCHS = 320
 BATCH_SIZE = 128
 LEARNING_RATE = 0.001
 LATENT_DIM = 30
@@ -13,7 +13,7 @@ LATENT_DIM = 30
 dataset = MDataset("./dataset", "no_obj")
 model = load_mmvae_model(f"./models/moe_vae_model_{LATENT_DIM}.pth", 20, LATENT_DIM)
 model.to(device)
-dataset.prepare_hidden_sequence(model, seq_len=10, device=device)
+
 lstm_model = MuLogvarLSTM(
     embedding_dim=LATENT_DIM,
     hidden_dim=512,
@@ -23,8 +23,8 @@ lstm_model = MuLogvarLSTM(
 optimizer = torch.optim.Adam(lstm_model.parameters(), lr=LEARNING_RATE, weight_decay=0.0001)
 
 losses = {
-    "train": [],
-    "validation": []
+    "train_loss": [],
+    "val_loss": []
 }
 
 
@@ -39,17 +39,17 @@ for i in random_numbers:
     for epoch in trange(EPOCHS, desc=f"SeqLen {i}", unit="epoch", colour="green"):
         epoch_tr_loss = lstm_model.train_epoch(tr_loader, optimizer, device, teacher_forcing=False)
         epoch_vs_loss = lstm_model.test_epoch(vl_loader, device, teacher_forcing=False)
-        losses["train"].append(epoch_tr_loss)
-        losses["validation"].append(epoch_vs_loss)
+        losses["train_loss"].append(epoch_tr_loss)
+        losses["val_loss"].append(epoch_vs_loss)
         print(f"Epoch {epoch+1}/{EPOCHS} - Train Loss: {epoch_tr_loss:.4f} - Val Loss: {epoch_vs_loss:.4f}")
         # early stopping criteria
-        if epoch > 10 and epoch_vs_loss > max(losses["validation"][-6:-1]):
+        if epoch > 10 and epoch_vs_loss > max(losses["val_loss"][-6:-1]):
             print("\nEarly stopping triggered.\n")
-            lstm_model.load_state_dict(torch.load(f"./models/lstm_model_mm_{LATENT_DIM}.pth", map_location=device))
+            lstm_model.load_state_dict(torch.load(f"./models/lstm_mmvae_{LATENT_DIM}.pth", map_location=device))
             break
         # Save model if validation loss improves
-        if epoch == 0 or epoch_vs_loss < min(losses["validation"][:-1]):
-            torch.save(lstm_model.state_dict(), f"./models/lstm_model_mm_{LATENT_DIM}.pth")
+        if epoch == 0 or epoch_vs_loss < min(losses["val_loss"][:-1]):
+            torch.save(lstm_model.state_dict(), f"./models/lstm_mmvae_{LATENT_DIM}.pth")
             print(f"Model saved for sequence length {i}.")
 
 # Plot the losses

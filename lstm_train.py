@@ -6,7 +6,7 @@ from helpers.utils_proj import device
 import random
 import matplotlib.pyplot as plt
 
-LATENT_DIM = 200
+LATENT_DIM = 30
 VAE_NAME = f"models/vae_model_{LATENT_DIM}_kl1_.pth"
 
 def main():
@@ -25,13 +25,13 @@ def main():
 	#random_numbers = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 	random_numbers = [4, 10, 8, 16, 5, 20, 7, 12, 14, 6]
 	#random_numbers = [6]
+	optimizer = torch.optim.Adam(lstm_model.parameters(), lr=0.001, weight_decay=0.0001)
 	for i in random_numbers:
 		print(f"Training LSTM model without teacher forcing an len {i}...")
 		ds = Dataset("dataset", "no_obj", model, seq_len=i)
 		tr, vs = ds.get_training_set(), ds.get_validation_set()
 		tr_loader = torch.utils.data.DataLoader(tr, batch_size=128, shuffle=True)
 		vs_loader = torch.utils.data.DataLoader(vs, batch_size=32, shuffle=False)
-		optimizer = torch.optim.Adam(lstm_model.parameters(), lr=0.001, weight_decay=0.0001)
 		for epoch in range(320):
 			epoch_tr_loss = lstm_model.train_epoch(tr_loader, optimizer, device, teacher_forcing=False, full_error=False)
 			epoch_vs_loss = lstm_model.test_epoch(vs_loader, device, teacher_forcing=False, full_error=False)

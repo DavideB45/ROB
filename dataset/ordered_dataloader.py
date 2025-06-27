@@ -28,9 +28,9 @@ class Dataset(torch.utils.data.Dataset):
         # they have len 7322
         print(f"vision shape: {vision.shape}, act shape: {act.shape}")
         # remove 2 frames (to be divisible by 10)
-        pos = pos[1:-1]
-        vision = vision[1:-1]
-        act = act[:-2] # different to account for previous action
+        pos = pos[1:]
+        vision = vision[1:]
+        act = act[:-1] # different to account for previous action
         print(f"pos shape: {pos.shape}, vision shape: {vision.shape}, act shape: {act.shape}")
         self.setup_dataset(vision, act, vision_vae)
         self.split_data(vision)
@@ -124,8 +124,8 @@ class Dataset(torch.utils.data.Dataset):
         for i in range(0, len(act) - self.seq_len, self.seq_len):
             mu_frames = world_embedding_mu[i:i + self.seq_len]  # take 10 frames of mean
             logvar_frames = world_embedding_lv[i:i + self.seq_len]
-            act_frames = act[i:i + self.seq_len]  # take 10 frames of actions
-            if len(mu_frames) == self.seq_len and len(act_frames) == self.seq_len:
+            act_frames = act[i:i + self.seq_len + 1]  # take 10 frames of actions
+            if len(mu_frames) == self.seq_len and len(act_frames) == self.seq_len + 1:
                 self.data.append((mu_frames, logvar_frames, act_frames))
             else:
                 print(f"Skipping incomplete frame set at index {i}: {len(mu_frames)} frames, {len(act_frames)} actions")  
@@ -140,7 +140,8 @@ class Dataset(torch.utils.data.Dataset):
         self.ts = self.data[split_idx2:]
         vision_blocked = []
         for i in range(0, len(vision) - self.seq_len, self.seq_len):
-            vision_blocked.append(vision[i:i + self.seq_len])
+            if i + self.seq_len + 1 < len(vision):
+                vision_blocked.append(vision[i:i + self.seq_len])
         vision_blocked = np.array(vision_blocked)
         self.tr_ref = vision_blocked[:split_idx]
         self.vs_ref = vision_blocked[split_idx:split_idx2]
