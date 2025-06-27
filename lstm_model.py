@@ -80,7 +80,7 @@ class MuLogvarLSTM(nn.Module):
 
             # Start from t=0
             for t in range(seq_len_pred - 1):
-                if t < seq_len_obs - 1:
+                if t <= seq_len_obs - 1:
                     # Use ground truth
                     mu_input = mu[:, t, :]
                     logvar_input = logvar[:, t, :]

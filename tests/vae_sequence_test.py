@@ -71,14 +71,14 @@ def compute_ssim(mu_pred:torch.Tensor, vae:VAE, ref:torch.Tensor):
 	return ssim_value
 
 if __name__ == "__main__":
-
+	print("\033[93mVAE Sequence Length Test, Latent Dim:\033[0m", LATENT_DIM)
 	# Create the dataset
 	model_vae = get_model_VAE(latent_dim=LATENT_DIM)
 	lstm_model = get_model_lstm(latent_dim=LATENT_DIM)
 
 	mse_results = []
 
-	for seq_len in range(3, 21):
+	for seq_len in range(30, 31):
 		# Get training and validation sets
 		dataset = prepare_dataset(model_vae, seq_len=seq_len)
 		ts = torch.utils.data.DataLoader(dataset.get_test_set(), batch_size=1, shuffle=False)
@@ -87,23 +87,23 @@ if __name__ == "__main__":
 		with torch.no_grad():
 			for (mu_frames, logvar_frames, act_frames), ref in zip(ts, ts_ref):
 				mu, log = lstm_model.predict(
-					mu_frames.to(device),
-					logvar_frames.to(device),
+					mu_frames[:,:2,:].to(device),
+					logvar_frames[:,:2,:].to(device),
 					act_frames.float().to(device)
 				)
 				mse_error = compute_ssim(mu, model_vae, ref)
 				average_mse += mse_error
-				#make_comp_gif(mu, model_vae, ref, f"figures/comp_0.gif", dataset=dataset)
-				#exit(0)
+				make_comp_gif(mu, model_vae, ref, f"figures/comp_vae_0_{LATENT_DIM}.gif", dataset=dataset)
+				exit(0)
 		average_mse /= len(ts)
 		mse_results.append(average_mse)
 		print(f"Seq_len: {seq_len}, Average SSIM: {average_mse:.4f}")
 
-	print("SSIM results for sequence lengths 3 to 20:", mse_results)
+	print("\033[92mSSIM results for sequence lengths 3 to 20:\033[0m", mse_results)
 
 	# Plotting
 	plt.figure(figsize=(8, 5))
-	plt.plot(range(3, 21), mse_results, marker='o')
+	plt.plot(range(3, 31), mse_results, marker='o')
 	plt.xlabel('Sequence Length')
 	plt.ylabel('Average SSIM')
 	plt.title('SSIM vs Sequence Length')
