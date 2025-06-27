@@ -128,8 +128,8 @@ class MDataset(torch.utils.data.Dataset):
 		for i in range(0, len(mu) - seq_len, seq_len):
 			mu_frames = mu[i:i + seq_len]
 			logvar_frames = logvar[i:i + seq_len]
-			act_frames = self.cond_input[i:i + seq_len]
-			if len(mu_frames) == seq_len and len(act_frames) == seq_len:
+			act_frames = self.cond_input[i:i + seq_len + 1]
+			if len(mu_frames) == seq_len and len(act_frames) == seq_len + 1:
 				self.sequence.append((mu_frames, logvar_frames, act_frames))
 				self.visual_ref.append(self.vision[i+1:i+1 + seq_len])
 			else:
@@ -142,18 +142,24 @@ class MDataset(torch.utils.data.Dataset):
 			raise ValueError("Hidden sequence not prepared. Call prepare_hidden_sequence first.")
 		
 		split_idx = int(len(self.sequence) * (1 - test_perc))
-		split_idx2 = int(len(self.visual_ref) * (1 - test_perc/3))
+		split_idx2 = int(len(self.sequence) * (1 - test_perc/3))
 		train_data = self.sequence[:split_idx]
 		val_data = self.sequence[split_idx:split_idx2]
-		test_data = self.sequence[split_idx2:]
-		visual_ref_val = self.visual_ref[split_idx:split_idx2]
+		self.test_data = self.sequence[split_idx2:]
+		visual_ref_ts = self.visual_ref[split_idx2:]
 		train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=shuffle)
 		val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, shuffle=False)
-
+		
 		self.visual_ref = []
-		for i in range(0, len(visual_ref_val), batch_size):
-			self.visual_ref.append(visual_ref_val[i:i + batch_size])
+		for i in range(0, len(visual_ref_ts), 1):
+			self.visual_ref.append(visual_ref_ts[i:i + 1])
 		return train_loader, val_loader
+	
+	def get_test_set(self) -> torch.utils.data.DataLoader:
+		"""Get DataLoader for the test set."""
+		if not hasattr(self, 'test_data'):
+			raise ValueError("Test data not prepared. Call get_sequence_loaders first.")
+		return torch.utils.data.DataLoader(self.test_data, batch_size=1, shuffle=False)
 	
 	def get_visual_reference(self) -> np.ndarray:
 		"""Get visual reference for validation."""
