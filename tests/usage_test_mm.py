@@ -1,3 +1,6 @@
+import os, sys, torch
+sys.path.append(os.path.dirname(os.path.dirname("..")))
+
 from moe_vae import MoE_VAE, load_mmvae_model
 from dataset.m_dataloader import MDataset
 import torch

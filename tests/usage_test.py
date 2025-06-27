@@ -1,3 +1,6 @@
+import os, sys, torch
+sys.path.append(os.path.dirname(os.path.dirname("..")))
+
 import random
 from vae_model import VAE
 from lstm_model import MuLogvarLSTM
