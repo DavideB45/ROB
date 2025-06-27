@@ -121,7 +121,7 @@ class MoE_VAE(nn.Module):
 		
 		kld_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp()) * beta
 
-		return reconstruction_loss_vision + reconstruction_loss_proprioception*150 + kld_loss
+		return reconstruction_loss_vision + reconstruction_loss_proprioception + kld_loss
 
 	def train_epoch(self, dataloader, sense_order:list[str], optimizer, beta=1.0, device='cpu'):
 		self.train()
