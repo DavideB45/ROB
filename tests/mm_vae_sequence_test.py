@@ -11,7 +11,7 @@ import numpy as np
 from skimage.metrics import structural_similarity as ssim
 import matplotlib.pyplot as plt
 
-LATENT_DIM = 200
+LATENT_DIM = 30
 POS_W = False
 
 def get_model_MMVAE(latent_dim=LATENT_DIM):
@@ -40,7 +40,7 @@ def get_dataset():
 	dataset = MDataset("dataset", "no_obj")
 	return dataset
 
-def make_comp_gif(mu_pred:torch.Tensor, vae:VAE, ref:torch.Tensor, path:str, duration:int=800, dataset:MDataset=None):
+def make_comp_gif(mu_pred:torch.Tensor, vae:VAE, ref:torch.Tensor, path:str, duration:int=200, dataset:MDataset=None):
 	"""
 	Create 2 GIF comparing the predicted sequence and the reference frames.
 	"""
@@ -79,8 +79,8 @@ if __name__ == "__main__":
 
 	mse_results = []
 
-	#num = 0
-	for seq_len in range(30, 31):
+	num = 0
+	for seq_len in range(40, 41):
 		dataset.prepare_hidden_sequence(model_mmvae, seq_len=seq_len, device=device)
 		dataset.get_sequence_loaders(test_perc=0.3)
 		# Get training and validation sets
@@ -91,9 +91,9 @@ if __name__ == "__main__":
 		average_mse = 0.0
 		with torch.no_grad():
 			for (mu_frames, logvar_frames, act_frames), ref in zip(ts, ts_ref):
-				# if num < 37:
-				# 	num += 1
-				# 	continue
+				if num < 30:
+					num += 1
+					continue
 				mu, log = lstm_model.predict(
 					mu_frames[:,:2,:].to(device),
 					logvar_frames[:,:2,:].to(device),
