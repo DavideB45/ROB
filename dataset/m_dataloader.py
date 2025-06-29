@@ -136,6 +136,31 @@ class MDataset(torch.utils.data.Dataset):
 				print(f"Skipping incomplete frame set at index {i}: {len(mu_frames)} frames, {len(act_frames)} actions")
 		self.seq_len = seq_len
 
+	def get_raw_sequence(self, seq_len) -> list:
+		"""
+		prepare and send the test set non processed (vision, position).
+		"""
+		# Return the last 10% of the data (vision, position, action) as a list of tuples
+		num_samples = len(self.vision)
+		start_idx = int(num_samples * 0.9)
+		raw_seq = [(self.vision[i], self.position[i], self.cond_input[i]) for i in range(start_idx, num_samples)]
+		# Create a list of sequences of length seq_len
+		sequence = []
+		for i in range(0, len(raw_seq) - seq_len, seq_len):
+			vision_frames = [raw_seq[j][0] for j in range(i, i + seq_len)]
+			position_frames = [raw_seq[j][1] for j in range(i, i + seq_len)]
+			action_frames = [raw_seq[j][2] for j in range(i, i + seq_len + 1)]
+			if len(vision_frames) == seq_len and len(action_frames) == seq_len + 1:
+				sequence.append((
+					torch.stack(vision_frames, dim=0),
+					torch.stack(position_frames, dim=0),
+					torch.stack(action_frames)
+				))
+			else:
+				print(f"Skipping incomplete frame set at index {i}: {len(vision_frames)} frames, {len(action_frames)} actions")
+		return sequence
+		
+
 	def get_sequence_loaders(self, test_perc: float = 0.1, batch_size: int = 32, shuffle: bool = True) -> tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
 		"""Get DataLoaders for the prepared hidden sequence."""
 		if not hasattr(self, 'sequence'):

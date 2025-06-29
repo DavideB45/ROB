@@ -3,6 +3,8 @@ from torch.nn.functional import relu, mse_loss
 import torch.nn as nn
 import torch
 
+from fc_vae import FC_VAE
+
 class MuLogvarLSTM(nn.Module):
     def __init__(self, embedding_dim: int, hidden_dim: int, num_layers: int = 1, 
                  dropout: float = 0.2):
@@ -56,7 +58,29 @@ class MuLogvarLSTM(nn.Module):
         mu = self.fc_mu(out) #+ x[:, :, :self.embedding_dim]
         logvar = self.fc_logvar(out) #+ x[:, :, self.embedding_dim:2*self.embedding_dim]
         return mu, logvar, (h_t, h_c)
-        
+    
+    def single_element_forward(self, x, h_t=None, h_c=None):
+        """
+        Forward pass of the LSTM model for a single element.
+        Args:
+            x (torch.Tensor): Input tensor of shape (1, mu + logvar + act(t-1) + act(t)).
+        Returns:
+            torch.Tensor: Output tensor of shape (1, embedding_dim).
+        """
+        out = relu(self.prep_fc(x))
+        out = self.batch_norm_prep(out.unsqueeze(0)).squeeze(0)
+        out = relu(self.prep_fc2(out))
+        skip = self.batch_norm_prep2(out.unsqueeze(0)).squeeze(0)
+        out, (h_t, h_c) = self.lstm(skip.unsqueeze(0), (h_t, h_c)) if h_t is not None else self.lstm(skip.unsqueeze(0))
+        out = self.batch_norm_1(out)  # Apply batch normalization
+        out = torch.cat((out, skip.unsqueeze(0)), dim=-1)  # Concatenate the skip connection
+        out = relu(self.fc_1(out))
+        out = self.batch_norm_2(out)
+        out = relu(self.fc_2(out))
+        out = self.batch_norm_3(out)
+        mu = self.fc_mu(out)  # Output mean
+        logvar = self.fc_logvar(out)  # Output log variance
+        return mu, logvar, (h_t, h_c)
 
     
     def predict(self, mu:torch.Tensor, logvar:torch.Tensor, act:torch.Tensor):
@@ -100,7 +124,46 @@ class MuLogvarLSTM(nn.Module):
 
             return outputs_mu, outputs_logvar
 
-            
+    def position_based_predict(self, full_mu:torch.Tensor, full_logvar:torch.Tensor, position_mu:torch.Tensor, position_logvar:torch.Tensor, act:torch.Tensor):
+        """
+        Predict future values using the LSTM model with position-based inputs (after initializing with full_mu and full_logvar).
+        Args:
+            full_mu (torch.Tensor): Few mean tensor of shape (batch_size, seq_len_1, embedding_dim) obtained with vision + position.
+            full_logvar (torch.Tensor): Few log variance tensor of shape (batch_size, seq_len_1, embedding_dim) obtained with vision + position.
+            position_mu (torch.Tensor): Position mean tensor of shape (batch_size, seq_len_obs, embedding_dim) obtained with position only.
+            position_logvar (torch.Tensor): Position log variance tensor of shape (batch_size, seq_len_obs, embedding_dim) obtained with position only.
+            act (torch.Tensor): Action tensor of shape (batch_size, seq_len_1 + seq_len_obs, act_dim).
+        Returns:
+            torch.Tensor: Predicted mean tensor of shape (batch_size, seq_len_1 + seq_len_obs, embedding_dim).
+        """
+        self.eval()
+        with torch.no_grad():
+            batch_size, seq_len_1, embed_dim = full_mu.shape
+            _, seq_len_obs, _ = position_mu.shape
+            _, seq_len_act, act_dim = act.shape
+
+            h_t, c_t = None, None  # For LSTM hidden state
+            outputs_mu = []
+            outputs_logvar = []
+            # Start from t=0
+            for t in range(seq_len_1 + seq_len_obs - 1):
+                if t <= seq_len_1:
+                    # Use full_mu and full_logvar
+                    mu_input = full_mu[:, t, :]
+                    logvar_input = full_logvar[:, t, :]
+                else:
+                    # Use position_mu and position_logvar
+                    mu_input = position_mu[:, t - seq_len_1, :]
+                    logvar_input = position_logvar[:, t - seq_len_1, :]
+                act_t = act[:, t, :]
+                act_t1 = act[:, t + 1, :]
+                lstm_input = torch.cat([mu_input, logvar_input, act_t, act_t1], dim=-1).unsqueeze(1)
+                mu_pred, logvar_pred, (h_t, c_t) = self.forward(lstm_input, h_t, c_t)
+                outputs_mu.append(mu_pred.squeeze(1))
+                outputs_logvar.append(logvar_pred.squeeze(1))
+            return outputs_mu, outputs_logvar
+
+                                                    
 
     def forward_teacher_forcing(self, mu, logvar, act, device:torch.device='cpu'):
         """
