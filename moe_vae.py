@@ -196,7 +196,7 @@ def load_mmvae_model(path: str, proprioception_input_dim: int, latent_dim: int) 
 		MoE_VAE: An instance of the MoE_VAE model loaded from the file.
 	"""
 	model = create_mmvae_model(proprioception_input_dim, latent_dim)
-	model.load_state_dict(torch.load(path))
+	model.load_state_dict(torch.load(path, map_location=torch.device('cpu')))
 	return model
 	
 

@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 
 LATENT_DIM = 200
 POS_W = False
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
 
 def get_model_MMVAE(latent_dim=LATENT_DIM):
 	"""
@@ -107,7 +108,8 @@ if __name__ == "__main__":
 						logvar_input = logvar_early[t, :]
 					else:
 						pos_decoded = model_mmvae.proprioception.decode(outputs_mu[-1])
-						mu_input = mu_input - model_mmvae.proprioception.encode(pos_decoded)[0].squeeze(0) + model_mmvae.proprioception.encode(pos[t, :].unsqueeze(0))[0].squeeze(0)
+						mu_input = mu_input - model_mmvae.proprioception.encode(pos_decoded)[0].squeeze(0)/2 + model_mmvae.proprioception.encode(pos[t, :].unsqueeze(0))[0].squeeze(0)/2
+						#mu_input = model_mmvae.proprioception.encode(pos[t, :].unsqueeze(0))[0].squeeze(0)
 						logvar_input = torch.zeros_like(mu_input)
 					act_t = act[t, :]
 					act_t1 = act[t + 1, :]
